@@ -1,3 +1,4 @@
+import numpy as np 
 
 class BasicCfg:
     class env:
@@ -11,27 +12,33 @@ class BasicCfg:
         episode_length_s = 20  # episode length in seconds
 
         # ----------- Basic Observation ------------
-        ## gravity + dof_pos + dof_vel = 3 + 12 + 12 = 27
+        ## gravity + dof_pos + dof_vel + action= 3 + 12 + 12 + 12 = 39
+        ##
+        observe_command = True #! 15
+        observe_two_prev_actions = True #! 24
+        observe_timing_parameter = False
+        observe_clock_inputs = True #! 4 
         observe_vel = True #! 6
         observe_only_ang_vel = False
         observe_only_lin_vel = False
         observe_yaw = False
         observe_contact_states = False
-        observe_command = True #! 15
+        observe_foot_in_base = False
+        
         observe_height_command = False
         observe_gait_commands = True 
-        observe_timing_parameter = False
-        observe_clock_inputs = True #! 4 
-        observe_two_prev_actions = True #! 24
+        
+        
+        
         observe_imu = False
 
         # ---------- Privileged Observations ----------
         num_privileged_obs = 2
         privileged_future_horizon = 1
         priv_observe_friction = True 
-        priv_observe_friction_indep = False
-        priv_observe_ground_friction = False
-        priv_observe_ground_friction_per_foot = False
+        priv_observe_friction_indep = False # not implemented
+        priv_observe_ground_friction = False # not implemented
+        priv_observe_ground_friction_per_foot = False # not implemented
         priv_observe_restitution = True
         priv_observe_base_mass = False
         priv_observe_com_displacement = False
@@ -74,27 +81,23 @@ class BasicCfg:
         static_friction = 1.0
         dynamic_friction = 1.0
         restitution = 0.
-        # rough terrain only:
+        # Height Map only:
         measure_heights = False
-        measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
-        measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
-        measured_foot_points_x = [-0.1,-0.05,0.05,0.1]
-        measured_foot_points_y = [-0.1,-0.05,0.05,0.1]
+        measured_points_x = np.linspace(-0.8,0.8,17).tolist()
+        measured_points_y = np.linspace(-0.5,0.5,11).tolist()
+        # Footclearance only:
+        measure_foot_clearance = False #! 4 
+        # Footheight only:
+        foot_offset = 0.02
+        measure_foot_heights = False #! 3 * 3 * 4 
+        measured_foot_points_x = [-0.1,0.0,0.1]
+        measured_foot_points_y = [-0.1,0.0,0.1]
         
         selected = True # False # select a unique terrain type and pass all arguments
         terrain_kwargs = {'type':"random_uniform_terrain",
                           'min_height':-0.02,
                           'max_height':0.02,
                           'step':0.005} # None # Dict of arguments for selected terrain
-        
-        # terrain_kwargs = {'type':"wave_terrain",
-        #                   'num_waves': 1,
-        #                   'amplitude': 0.5} # None # Dict of arguments for selected terrain
-        
-        # terrain_kwargs = {'type':"sloped_terrain",
-        #                   'slope': 0.18} # None # Dict of arguments for selected terrain
-        
-        max_init_terrain_level = 5 # starting curriculum state
         terrain_length = 8.
         terrain_width = 8.
         num_rows= 10 # number of terrain rows (levels)
@@ -104,8 +107,8 @@ class BasicCfg:
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
         min_init_terrain_level = 0
-        max_init_terrain_level = 5
-        center_robots = True
+        max_init_terrain_level = 1
+        center_robots = False
         center_span = 4
         x_init_range = 0.2
         y_init_range = 0.2
@@ -117,6 +120,39 @@ class BasicCfg:
 
     class commands:
         command_curriculum = True
+
+        cmd_cfg = {
+            0:{
+                'name':'vel_x',
+                'init_low':-1.0,
+                'init_high':1.0,
+                'limit_low':-5.0,
+                'limit_high':5.0,
+                'local_range':0.1,
+                'num_bins':21,
+            },
+            1:{
+                'name':'vel_y',
+                'init_low':-0.6,
+                'init_high':0.6,
+                'limit_low':-0.6,
+                'limit_high':0.6,
+                'local_range':0.1,
+                'num_bins':21,
+            },
+            2:{
+                'name':'vel_yaw',
+                'init_low':-1.0,
+                'init_high':1.0,
+                'limit_low':-5.0,
+                'limit_high':5.0,
+                'local_range':0.1,
+                'num_bins':21,
+            }
+
+        }
+
+
         max_reverse_curriculum = 1.
         max_forward_curriculum = 1.
         yaw_command_curriculum = False
@@ -211,8 +247,8 @@ class BasicCfg:
         gaitwise_curricula = True
 
     class curriculum_thresholds:
-        tracking_lin_vel = 0.8  # closer to 1 is tighter
-        tracking_ang_vel = 0.7
+        tracking_lin_vel = 0.7  # closer to 1 is tighter
+        tracking_ang_vel = 0.6
         tracking_contacts_shaped_force = 0.9 # closer to 1 is tighter
         tracking_contacts_shaped_vel = 0.9
 
@@ -275,26 +311,37 @@ class BasicCfg:
         # add link masses, increase range, randomize inertia, randomize joint properties
         rand_interval_s = 10
         randomize_rigids_after_start = False
+
         randomize_friction = True
-        friction_range = [0.1, 3.0] # increase range
+        friction_range = [0.1, 3.0] 
+
         randomize_restitution = False
         restitution_range = [0.0, 0.4]
+
         randomize_base_mass = False
-        # add link masses, increase range, randomize inertia, randomize joint properties
         added_mass_range = [-1.0, 3.0]
+
         randomize_com_displacement = False
-        # add link masses, increase range, randomize inertia, randomize joint properties
         com_displacement_range = [-0.15, 0.15]
+
         randomize_motor_strength = False
         motor_strength_range = [0.9, 1.1]
+
+        randomize_motor_offset = False 
+        motor_offset_range = [-0.05, 0.05]
+
         randomize_Kp_factor = False
         Kp_factor_range = [0.8, 1.3]
+
         randomize_Kd_factor = False
         Kd_factor_range = [0.5, 1.5]
+
         gravity_rand_interval_s = 8
         gravity_impulse_duration = 0.99
+
         randomize_gravity = False
         gravity_range = [-1.0, 1.0]
+
         push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
@@ -317,12 +364,13 @@ class BasicCfg:
         soft_torque_limit = 1.
         base_height_target = 0.34
         max_contact_force = 100.  # forces above this value are penalized
-        use_terminal_body_height = True
+        
+        #! not immplemented in complex terrain
+        use_terminal_body_height = True 
         terminal_body_height = 0.05
-        use_terminal_foot_height = False
         terminal_foot_height = -0.005
-        use_terminal_roll_pitch = True
         terminal_body_ori = 1.6
+        
         kappa_gait_probs = 0.07
         gait_force_sigma = 100.
         gait_vel_sigma = 10.
@@ -380,6 +428,7 @@ class BasicCfg:
         dof_pos = 1.0
         dof_vel = 0.05
         imu = 0.1
+        foot_in_base = 2.0
         height_measurements = 5.0
         friction_measurements = 1.0
         body_height_cmd = 2.0
@@ -409,6 +458,7 @@ class BasicCfg:
         gravity = 0.05
         contact_states = 0.05
         height_measurements = 0.1
+        foot_in_base = 0.01
         friction_measurements = 0.0
         segmentation_image = 0.0
         rgb_image = 0.0
@@ -417,8 +467,8 @@ class BasicCfg:
     # viewer camera:
     class viewer:
         ref_env = 0
-        pos = [10, 0, 6]  # [m]
-        lookat = [11., 5, 3.]  # [m]
+        pos = [2.0, 0.0, 1.0]  # [m]
+        lookat = [1., 1., 0.]  # [m]
 
     class sim:
         dt = 0.005
@@ -442,12 +492,13 @@ class BasicCfg:
             contact_collection = 2  # 0: never, 1: last sub-step, 2: all sub-steps (default=2)
 
 class BasicRunnerCfg:
+    
     class algorithm:
         # algorithmpass
         value_loss_coef = 1.0
         use_clipped_value_loss = True
         clip_param = 0.2
-        entropy_coef = 0.001
+        entropy_coef = 0.01
         num_learning_epochs = 5
         num_mini_batches = 4  # mini batch size = num_envs*nsteps / nminibatches
         learning_rate = 5.e-4 # 5.e-4
@@ -459,8 +510,7 @@ class BasicRunnerCfg:
         desired_kl = 0.01
         max_grad_norm = 1.
         selective_adaptation_module_loss = False
-        use_control = True 
-
+        
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]

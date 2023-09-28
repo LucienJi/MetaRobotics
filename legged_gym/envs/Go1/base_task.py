@@ -86,6 +86,19 @@ class BaseTask(gym.Env):
                 self.viewer, gymapi.KEY_ESCAPE, "QUIT")
             self.gym.subscribe_viewer_keyboard_event(
                 self.viewer, gymapi.KEY_V, "toggle_viewer_sync")
+            
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_R, "reset")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_W, "w")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_A, "a")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_S, "s")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_D, "d")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_E, "e")
+            self.gym.subscribe_viewer_keyboard_event(self.viewer, gymapi.KEY_Q, "q")
+            self.theta = 0.0
+            self.camera_direction = np.array([np.cos(self.theta), np.sin(self.theta), 0.])  
+            self.camera_direction2 = np.array([np.cos(self.theta + 0.5 * np.pi), np.sin(self.theta + 0.5 * np.pi), 0.])
+            self.camera_pos = np.array(cfg.viewer.pos)
+            self.camera_lookat = np.array(cfg.viewer.lookat)
 
     def get_observations(self):
         return self.obs_buf
@@ -107,6 +120,10 @@ class BaseTask(gym.Env):
     def step(self, actions):
         raise NotImplementedError
 
+    def _set_camera(self,pos,lookat):
+        cam_pos = gymapi.Vec3(*pos)
+        cam_target = gymapi.Vec3(*lookat)
+        self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
     def render_gui(self, sync_frame_time=True):
         if self.viewer:
             # check for window closed
@@ -117,8 +134,30 @@ class BaseTask(gym.Env):
             for evt in self.gym.query_viewer_action_events(self.viewer):
                 if evt.action == "QUIT" and evt.value > 0:
                     sys.exit()
-                elif evt.action == "toggle_viewer_sync" and evt.value > 0:
+                if evt.action == "toggle_viewer_sync" and evt.value > 0:
                     self.enable_viewer_sync = not self.enable_viewer_sync
+                if evt.action == 'w' and evt.value > 0:
+                    self.camera_pos += 2.0 * self.camera_direction
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
+                if evt.action == 's' and evt.value > 0:
+                    self.camera_pos -= 2.0 *  self.camera_direction
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
+                if evt.action == 'q' and evt.value > 0:
+                    self.theta -= 0.1
+                    self.camera_direction = np.array([np.cos(self.theta), np.sin(self.theta), 0.])  
+                    self.camera_direction2 = np.array([np.cos(self.theta + 0.5 * np.pi), np.sin(self.theta + 0.5 * np.pi), 0.])
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
+                if evt.action == 'e' and evt.value > 0:
+                    self.theta += 0.1
+                    self.camera_direction = np.array([np.cos(self.theta), np.sin(self.theta), 0.])  
+                    self.camera_direction2 = np.array([np.cos(self.theta + 0.5 * np.pi), np.sin(self.theta + 0.5 * np.pi), 0.])
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
+                if evt.action == 'a' and evt.value > 0:
+                    self.camera_pos -= 2.0 * self.camera_direction2
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
+                if evt.action == 'd' and evt.value > 0:
+                    self.camera_pos += 2.0 *  self.camera_direction2
+                    self._set_camera(self.camera_pos, self.camera_direction + self.camera_pos)
 
             # fetch results
             if self.device != 'cpu':

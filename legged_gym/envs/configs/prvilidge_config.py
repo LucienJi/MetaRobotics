@@ -121,11 +121,20 @@ class RunnerCfg(BasicRunnerCfg):
 
 class PlayEnvCfg(EnvCfg):
     class env(EnvCfg.env):
-        num_envs = 50 
+        num_envs = 50
     
     class terrain(EnvCfg.terrain):   
-        mesh_type = 'plane'
-    
+        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
+
+        terrain_kwargs = {'type':"random_uniform_terrain",
+                          'min_height':-0.05,
+                          'max_height':0.05,
+                          'step':0.005} # None # Dict of arguments for selected terrain
+        terrain_length = 8.
+        terrain_width = 8.
+        num_rows= 2 # number of terrain rows (levels)
+        num_cols = 2 # number of terrain cols (types)
+
     class domain_rand(EnvCfg.domain_rand):
         # add link masses, increase range, randomize inertia, randomize joint properties
         randomize_rigids_after_start = False

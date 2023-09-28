@@ -36,11 +36,11 @@ def play_pri(args,headless=True):
                                     headless=headless, 
                                     cfg = env_cfg,eval_cfg=None)
     env = HistoryWrapper(env)
-    model_path = "logs/Privilege/Sep01_23-00-44_Test/model_20000.pt"
+    model_path = "model_archives/model_20000.pt"
     # policy = load_policy(model_path,env,policy_cfg)
     policy_cfg = class_to_dict(runner_cfg.policy)
     policy = load_pri_policy(model_path,env,policy_cfg)
-    num_eval_steps = 250
+    num_eval_steps = 2500
 
     x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 0.5, 0.0, 0.0
     obs = env.reset()
@@ -57,4 +57,4 @@ def play_pri(args,headless=True):
 if __name__ == '__main__':
     # to see the environment rendering, set headless=False
     args = get_args()
-    play_pri(args,headless=True)
+    play_pri(args,headless=False)
