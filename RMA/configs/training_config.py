@@ -7,7 +7,7 @@ class EnvCfg(BasicCfg):
         num_envs = 4096
         num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 
         num_actions = 12
-        num_observation_history = 50
+        num_observation_history = 10
         episode_length_s = 20  # episode length in seconds
 
         # ----------- Basic Observation ------------
@@ -129,25 +129,25 @@ class EnvCfg(BasicCfg):
                 'init_high':1.0,
                 'limit_low':-1.5,
                 'limit_high':1.5,
-                'local_range':0.3,
+                'local_range':0.5,
                 'num_bins':5,
             },
             1:{
                 'name':'vel_y',
-                'init_low':-0.6,
-                'init_high':0.6,
-                'limit_low':-1.0,
-                'limit_high':1.0,
-                'local_range':0.1,
+                'init_low':-0.3,
+                'init_high':0.3,
+                'limit_low':-0.6,
+                'limit_high':0.6,
+                'local_range':0.5,
                 'num_bins':1,
             },
             2:{
                 'name':'vel_yaw',
                 'init_low':-1.0,
                 'init_high':1.0,
-                'limit_low':-3.0,
-                'limit_high':3.0,
-                'local_range':0.1,
+                'limit_low':-1.0,
+                'limit_high':1.0,
+                'local_range':0.5,
                 'num_bins':1,
             }
 
@@ -183,8 +183,8 @@ class EnvCfg(BasicCfg):
         torques = -0.0001
         feet_slip = -0.01
         
-        action_smoothness_1 = -0.01
-        action_smoothness_2 = -0.01
+        action_smoothness_1 = -0.001
+        action_smoothness_2 = -0.001
         # raibert_heuristic = -10.0
         # feet_clearance_cmd_linear = -30
 
@@ -232,11 +232,11 @@ class RunnerCfg(BasicRunnerCfg):
         critic_hidden_dims = [512, 256, 128]
         adaptation_module_branch_hidden_dims = [512, 256, 128]
 
-        num_history = 50
+        num_history = 10
         num_latent = 16
         activation = 'elu'
     class runner:
-        run_name = 'TCN_50'
+        run_name = 'TCN_10'
         experiment_name = 'RMA'
         
         num_steps_per_env = 24 # per iteration

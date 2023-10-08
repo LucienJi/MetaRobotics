@@ -5,36 +5,33 @@ import numpy as np
 class EnvCfg(BasicCfg):
     class env(BasicCfg.env):
         num_envs = 4096
-        num_observations = 45 + 12 + 12 
+        num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 
         num_actions = 12
         num_observation_history = 10
         episode_length_s = 20  # episode length in seconds
 
         # ----------- Basic Observation ------------
         ## 所有 vel 都看
-        observe_vel = False
-        observe_only_ang_vel = True
-        observe_contact_states = False 
+        observe_vel = True
+        observe_contact_states = True 
         observe_command = True 
-        observe_foot_in_base = True # 4*3 
 
         ## 手动 gait 设定的 task, 必须 observe gait command, clock 和 giat indice 才有意义
-        observe_two_prev_actions = True # 4*3
+        observe_two_prev_actions = False
         observe_gait_commands = False
         observe_timing_parameter = False
         observe_clock_inputs = False
         observe_imu = False
 
         # ---------- Privileged Observations ----------
-        num_privileged_obs = 18 + 17 * 11 
-        privileged_future_horizon = 1
+        num_privileged_obs = 18 + 4 + 36 + 17 * 11
+        privileged_future_horizon = 0
         priv_observe_friction = True #! 1
         priv_observe_restitution = True #! 1 
         priv_observe_base_mass = True #! 1
         priv_observe_com_displacement = True #! 3
         priv_observe_motor_strength = True #! 12
-        priv_observe_foot_height = False #! 4
-      
+        
     class terrain(BasicCfg.terrain):   
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.1 # [m]
@@ -49,23 +46,23 @@ class EnvCfg(BasicCfg):
         measured_points_x = np.linspace(-0.8,0.8,17).tolist()
         measured_points_y = np.linspace(-0.5,0.5,11).tolist()
         # Footclearance only:
-        measure_foot_clearance = False #! 4 
+        measure_foot_clearance = True #! 4 
         # Footheight only:
         foot_offset = 0.02
-        measure_foot_heights = False #! 3 * 3 * 4 
+        measure_foot_heights = True #! 3 * 3 * 4 
         measured_foot_points_x = [-0.1,0.0,0.1]
         measured_foot_points_y = [-0.1,0.0,0.1]
         
         
         curriculum = True # True
-        selected = False # False # select a unique terrain type and pass all arguments
+        selected = True # False # select a unique terrain type and pass all arguments
         terrain_kwargs = {
             # "plane_terrain":{
             #     "weight": 1.0,
             #     "height" : 0.0
             # },
             'random_uniform_terrain': {
-                "weight": 1.0,
+                "weight": 5.0,
                 "min_height" : -0.05,
                 "max_height" : 0.05,
                 "step" : 0.005,
@@ -122,8 +119,8 @@ class EnvCfg(BasicCfg):
         num_cols = 20 # number of terrain cols (types)
 
 
- 
     class commands(BasicCfg.commands):
+
         command_curriculum = True
         cmd_cfg = {
             0:{
@@ -156,9 +153,7 @@ class EnvCfg(BasicCfg):
 
         }
         
-        curriculum_type = None 
         num_commands = 3
-
         lin_vel_x = [-1.0, 1.0]  # min max [m/s]
         lin_vel_y =  [-0.6, 0.6]  # min max [m/s]
         ang_vel_yaw = [-1, 1]  # min max [rad/s]
@@ -195,26 +190,25 @@ class EnvCfg(BasicCfg):
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
-        randomize_rigids_after_start = False
+        randomize_rigids_after_start = True
         randomize_friction = True
-        friction_range = [0.1, 3.0] # increase range
-        randomize_restitution = False
+        friction_range = [0.1, 1.25] # increase range
+        randomize_restitution = True
         restitution_range = [0.0, 0.4]
-        randomize_base_mass = False
-        # add link masses, increase range, randomize inertia, randomize joint properties
+        randomize_base_mass = True
         added_mass_range = [-1.0, 3.0]
-        randomize_com_displacement = False
-        # add link masses, increase range, randomize inertia, randomize joint properties
+        randomize_com_displacement = True
         com_displacement_range = [-0.15, 0.15]
         randomize_motor_strength = False
         motor_strength_range = [0.9, 1.1]
         randomize_lag_timesteps = True
         lag_timesteps = 6
-        push_robots = False
+        push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
 
 class RunnerCfg(BasicRunnerCfg):
+
     class algorithm:
         # algorithmpass
         value_loss_coef = 1.0
@@ -232,23 +226,18 @@ class RunnerCfg(BasicRunnerCfg):
         desired_kl = 0.01
         max_grad_norm = 1.
         selective_adaptation_module_loss = False
-        
-        vae_learning_rate = 1e-3 
-        kl_weight = 1.0
-        estimator_learning_rate = 1e-3
-        
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
-        estimator_hidden_dims = [512, 256, 128]
+        adaptation_module_branch_hidden_dims = [512, 256, 128]
 
         num_history = 10
-        num_latent = 16 
-        activation = 'elu'
+        num_latent = 16
+        activation = 'lrelu'
     class runner:
-        run_name = 'Test'
-        experiment_name = 'EstimatorNet'
+        run_name = 'TCN_10'
+        experiment_name = 'Lips'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 1500 # number of policy updates
@@ -259,3 +248,4 @@ class RunnerCfg(BasicRunnerCfg):
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt 
+
