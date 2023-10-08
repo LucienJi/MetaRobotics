@@ -166,6 +166,7 @@ cython_debug/
 #others
 
 logs/
+data/
 *.txt
 log_files/
 

@@ -4,7 +4,7 @@ import numpy as np
 
 class EnvCfg(BasicCfg):
     class env(BasicCfg.env):
-        num_envs = 4096
+        num_envs = 500
         num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 
         num_actions = 12
         num_observation_history = 5
