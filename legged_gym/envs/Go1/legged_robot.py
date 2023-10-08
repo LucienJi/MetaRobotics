@@ -508,11 +508,7 @@ class LeggedRobot(BaseTask):
                                        self.sim_params)
 
         mesh_type = self.cfg.terrain.mesh_type
-        if mesh_type in ['heightfield', 'trimesh']:
-            if self.eval_cfg is not None:
-                self.terrain = Customized_Terrain(self.cfg.terrain)
-            else:
-                self.terrain = Customized_Terrain(self.cfg.terrain)
+        self.terrain = Customized_Terrain(self.cfg.terrain)
         if mesh_type == 'plane':
             self._create_ground_plane()
         elif mesh_type == 'heightfield':
@@ -1519,6 +1515,8 @@ class LeggedRobot(BaseTask):
         plane_params.dynamic_friction = self.cfg.terrain.dynamic_friction
         plane_params.restitution = self.cfg.terrain.restitution
         self.gym.add_ground(self.sim, plane_params)
+        self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows,
+                                                                            self.terrain.tot_cols).to(self.device)
 
     def _create_heightfield(self):
         """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.

@@ -149,6 +149,7 @@ class VecEnv(ABC):
     num_obs: int
     num_privileged_obs: int
     num_obs_history: int 
+    obs_history_length: int
     num_actions: int
     num_rewards: int
     max_episode_length: int
