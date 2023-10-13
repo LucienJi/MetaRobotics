@@ -52,6 +52,7 @@ class LeggedRobot(BaseTask):
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_buffers()
+        self._init_custom_gait_parameters()
         self._prepare_reward_function()
         self.init_done = True
         self.record_now = False
@@ -692,8 +693,8 @@ class LeggedRobot(BaseTask):
             sample_interval = int(self.cfg.commands.resampling_time / self.dt)
             env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
             self._resample_commands(env_ids)
-        self._step_contact_targets()
-        # self._step_custom_contact_targets()
+        # self._step_contact_targets()
+        self._step_custom_contact_targets()
 
         # measure terrain heights
         if self.cfg.terrain.measure_heights:
@@ -747,7 +748,8 @@ class LeggedRobot(BaseTask):
             self.command_sums[key][env_ids] = 0.
 
     def _update_command_curriculum(self,env_ids):
-        valid_id = (self.command_sums['ep_timesteps'][env_ids] > (self.cfg.commands.resampling_time/self.dt / 2.0)).nonzero(as_tuple=False).flatten()
+        # valid_id = (self.command_sums['ep_timesteps'][env_ids] > (self.cfg.commands.resampling_time/self.dt / 2.0)).nonzero(as_tuple=False).flatten()
+        valid_id = (self.command_sums['ep_timesteps'][env_ids] > 50).nonzero(as_tuple=False).flatten()
         env_ids = env_ids[valid_id] 
         ep_len = self.command_sums['ep_timesteps'][env_ids]
         if len(env_ids) == 0: return
@@ -910,60 +912,60 @@ class LeggedRobot(BaseTask):
 
     # endregion
 
-    # def _init_custom_gait_parameters(self):
+    def _init_custom_gait_parameters(self):
         
-    #     self.freq = 2.0 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     self.phases = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     self.offsets = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     self.bounds = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     self.foot_height = 0.12 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     self.durations = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-    #     kappa = self.cfg.rewards.kappa_gait_probs
-    #     self.smoothing_cdf_start = torch.distributions.normal.Normal(0,kappa).cdf
+        self.freq = 2.0 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.phases = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.offsets = 0.0 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.bounds = 0.0 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.foot_height = 0.1 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.durations = 0.5 * torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        kappa = self.cfg.rewards.kappa_gait_probs
+        self.smoothing_cdf_start = torch.distributions.normal.Normal(0,kappa).cdf
 
-        # (x) + torch.distributions.normal.Normal(1, kappa).cdf(x)) / 2
 
-    # def _step_custom_contact_targets(self):
-    #     self.gait_indices = torch.remainder(self.gait_indices + self.dt * self.freq, 1.0)
-    #     foot_indices = [self.gait_indices + self.offsets + self.bounds,
-    #                     self.gait_indices + self.phases+ self.bounds,
-    #                     self.gait_indices + self.phases,
-    #                     self.gait_indices + self.offsets]
-    #     self.foot_indices = torch.remainder(torch.cat([foot_indices[i].unsqueeze(1) for i in range(4)], dim=1), 1.0)
+    def _step_custom_contact_targets(self):
+        self.gait_indices = torch.remainder(self.gait_indices + self.dt * self.freq, 1.0)
+        foot_indices = [self.gait_indices + self.offsets + self.bounds,
+                        self.gait_indices + self.phases+ self.bounds,
+                        self.gait_indices + self.phases,
+                        self.gait_indices + self.offsets]
+        self.foot_indices = torch.remainder(torch.cat([foot_indices[i].unsqueeze(1) for i in range(4)], dim=1), 1.0)
 
-    #     for idxs in foot_indices:
-    #         stance_idxs = torch.remainder(idxs, 1) < self.durations
-    #         swing_idxs = torch.remainder(idxs, 1) > self.durations
-    #         idxs[stance_idxs] = torch.remainder(idxs[stance_idxs], 1) * (0.5 / self.durations[stance_idxs])
-    #         idxs[swing_idxs] = 0.5 + (torch.remainder(idxs[swing_idxs], 1) - self.durations[swing_idxs]) * (
-    #                         0.5 / (1 - self.durations[swing_idxs]))
+        for idxs in foot_indices:
+            stance_idxs = torch.remainder(idxs, 1) < self.durations
+            swing_idxs = torch.remainder(idxs, 1) > self.durations
+            idxs[stance_idxs] = torch.remainder(idxs[stance_idxs], 1) * (0.5 / self.durations[stance_idxs])
+            idxs[swing_idxs] = 0.5 + (torch.remainder(idxs[swing_idxs], 1) - self.durations[swing_idxs]) * (
+                            0.5 / (1 - self.durations[swing_idxs]))
             
           
-    #     smoothing_multiplier_FL = (self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0)) * (
-    #                 1 - self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0) - 0.5)) +
-    #                                    self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0) - 1) * (
-    #                                            1 - self.smoothing_cdf_start(
-    #                                        torch.remainder(foot_indices[0], 1.0) - 0.5 - 1)))
-    #     smoothing_multiplier_FR = (self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0)) * (
-    #                 1 - self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0) - 0.5)) +
-    #                                    self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0) - 1) * (
-    #                                            1 - self.smoothing_cdf_start(
-    #                                        torch.remainder(foot_indices[1], 1.0) - 0.5 - 1)))
-    #     smoothing_multiplier_RL = (self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0)) * (
-    #                 1 - self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0) - 0.5)) +
-    #                                    self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0) - 1) * (
-    #                                            1 - self.smoothing_cdf_start(
-    #                                        torch.remainder(foot_indices[2], 1.0) - 0.5 - 1)))
-    #     smoothing_multiplier_RR = (self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0)) * (
-    #                 1 - self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0) - 0.5)) +
-    #                                    self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0) - 1) * (
-    #                                            1 - self.smoothing_cdf_start(
-    #                                        torch.remainder(foot_indices[3], 1.0) - 0.5 - 1)))
+        smoothing_multiplier_FL = (self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0)) * (
+                    1 - self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0) - 0.5)) +
+                                       self.smoothing_cdf_start(torch.remainder(foot_indices[0], 1.0) - 1) * (
+                                               1 - self.smoothing_cdf_start(
+                                           torch.remainder(foot_indices[0], 1.0) - 0.5 - 1)))
+        smoothing_multiplier_FR = (self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0)) * (
+                    1 - self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0) - 0.5)) +
+                                       self.smoothing_cdf_start(torch.remainder(foot_indices[1], 1.0) - 1) * (
+                                               1 - self.smoothing_cdf_start(
+                                           torch.remainder(foot_indices[1], 1.0) - 0.5 - 1)))
+        smoothing_multiplier_RL = (self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0)) * (
+                    1 - self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0) - 0.5)) +
+                                       self.smoothing_cdf_start(torch.remainder(foot_indices[2], 1.0) - 1) * (
+                                               1 - self.smoothing_cdf_start(
+                                           torch.remainder(foot_indices[2], 1.0) - 0.5 - 1)))
+        smoothing_multiplier_RR = (self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0)) * (
+                    1 - self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0) - 0.5)) +
+                                       self.smoothing_cdf_start(torch.remainder(foot_indices[3], 1.0) - 1) * (
+                                               1 - self.smoothing_cdf_start(
+                                           torch.remainder(foot_indices[3], 1.0) - 0.5 - 1)))
 
-    #     self.desired_contact_states[:, 0] = smoothing_multiplier_FL
-    #     self.desired_contact_states[:, 1] = smoothing_multiplier_FR
-    #     self.desired_contact_states[:, 2] = smoothing_multiplier_RL
-    #     self.desired_contact_states[:, 3] = smoothing_multiplier_RR
+        self.desired_contact_states[:, 0] = smoothing_multiplier_FL
+        self.desired_contact_states[:, 1] = smoothing_multiplier_FR
+        self.desired_contact_states[:, 2] = smoothing_multiplier_RL
+        self.desired_contact_states[:, 3] = smoothing_multiplier_RR
+
 
     def _step_contact_targets(self):
         if self.cfg.env.observe_gait_commands:
@@ -1398,6 +1400,11 @@ class LeggedRobot(BaseTask):
                 if self.cfg.control.control_type in ["P", "V"]:
                     print(f"PD gain of joint {name} were not defined, setting them to zero")
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
+        self.delta_dof_pos_low = np.array([-0.1] * self.num_dof)
+        self.delta_dof_pos_high = np.array([0.1] * self.num_dof)
+        self.delta_dof_pos_low = self.dof_pos_limits[0:self.num_dof,0].cpu().numpy() - self.default_dof_pos[0,0:self.num_dof].cpu().numpy()
+        self.delta_dof_pos_high = self.dof_pos_limits[0:self.num_dof,1].cpu().numpy() - self.default_dof_pos[0,0:self.num_dof].cpu().numpy()
+        
 
         if self.cfg.control.control_type == "actuator_net":
             actuator_path = f'{os.path.dirname(os.path.dirname(os.path.realpath(__file__)))}/../../resources/actuator_nets/unitree_go1.pt'

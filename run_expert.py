@@ -8,7 +8,7 @@ from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
 
 from Expert.configs.training_config import EnvCfg,RunnerCfg
 from Expert.runners.onpolicy_runner import Runner
-from Expert.modules.ac import ActorCritic
+from Expert.modules.ac import NominalActorCritic as ActorCritic
 import torch 
 
 
@@ -59,17 +59,18 @@ def play(arg, path = None):
     
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
-    play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [0.5,0.0,0.0],
+    play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [1.,0.0,0.0],
                 move_camera=False,record=False)
 
 if __name__ == '__main__':
     args = get_args()
     if args.play:
-        play(args)
+        path = "logs/Expert/Oct11_18-13-48_Guide/model_5000.pt"
+        play(args,path)
         exit()
     else:
         env, runner , env_cfg ,train_cfg = launch(args)
-        runner.learn(num_learning_iterations=100)
+        runner.learn(num_learning_iterations=5000)
 
     
     

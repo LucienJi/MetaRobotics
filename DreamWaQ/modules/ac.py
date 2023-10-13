@@ -115,7 +115,7 @@ class ActorCritic(nn.Module):
         # Critic Module
 
         self.critic = BaseCritic(
-            num_obs=num_obs,
+            num_obs=num_obs + 3, #! 需要增加 real velocity
             num_privileged_obs=num_privileged_obs,
             num_obs_history=num_obs_history,
             num_latent=num_latent,
@@ -150,7 +150,6 @@ class ActorCritic(nn.Module):
         self.distribution.update(action_mean)
         return self.distribution.sample()
 
-    #! 
     def act_expert(self, obs, privileged_obs, obs_history, vel):
         # obs_dict: obs, obs_history, privileged_obs
         latent_mu, _ = self.vae.inference(obs_history)
@@ -168,7 +167,8 @@ class ActorCritic(nn.Module):
         latent = torch.cat([latent_mu,vel_mu],dim = 1)
         return self.actor.forward(obs_dict['obs'], latent)
 
-    def evaluate(self,obs,privileged_observations):
+    def evaluate(self,obs,privileged_observations, vel):
+        obs = torch.cat([obs, vel], dim = -1)
         value = self.critic.forward(obs, privileged_observations)
         return value 
         

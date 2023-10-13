@@ -7,7 +7,7 @@ class EnvCfg(BasicCfg):
         num_envs = 4096
         num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 
         num_actions = 12
-        num_observation_history = 10
+        num_observation_history = 5
         episode_length_s = 20  # episode length in seconds
 
         # ----------- Basic Observation ------------
@@ -24,47 +24,48 @@ class EnvCfg(BasicCfg):
         observe_imu = False
 
         # ---------- Privileged Observations ----------
-        num_privileged_obs = 18 + 4 + 36 + 17 * 11
+        num_privileged_obs = 3
         privileged_future_horizon = 0
         priv_observe_friction = True #! 1
         priv_observe_restitution = True #! 1 
         priv_observe_base_mass = True #! 1
-        priv_observe_com_displacement = True #! 3
-        priv_observe_motor_strength = True #! 12
+        priv_observe_com_displacement = False #! 3
+        priv_observe_motor_strength = False #! 12
         
     class terrain(BasicCfg.terrain):   
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.1 # [m]
         vertical_scale = 0.005 # [m]
-        border_size = 5 # [m]
+        border_size = 25 # [m]
         
         static_friction = 1.0
         dynamic_friction = 1.0
         restitution = 0.
         # Height Map only:
-        measure_heights = True #! 17 * 11
+        measure_heights = False #! 17 * 11
         measured_points_x = np.linspace(-0.8,0.8,17).tolist()
         measured_points_y = np.linspace(-0.5,0.5,11).tolist()
         # Footclearance only:
-        measure_foot_clearance = True #! 4 
+        measure_foot_clearance = False #! 4 
         # Footheight only:
         foot_offset = 0.02
-        measure_foot_heights = True #! 3 * 3 * 4 
+        measure_foot_heights = False #! 3 * 3 * 4 
         measured_foot_points_x = [-0.1,0.0,0.1]
         measured_foot_points_y = [-0.1,0.0,0.1]
         
         
         curriculum = True # True
         selected = True # False # select a unique terrain type and pass all arguments
+        
         terrain_kwargs = {
-            # "plane_terrain":{
-            #     "weight": 1.0,
-            #     "height" : 0.0
-            # },
+            "plane_terrain":{
+                "weight": 10.0,
+                "height" : 0.0
+            },
             'random_uniform_terrain': {
-                "weight": 5.0,
-                "min_height" : -0.05,
-                "max_height" : 0.05,
+                "weight": 1.0,
+                "min_height" : -0.03,
+                "max_height" : 0.03,
                 "step" : 0.005,
                 "downsampled_scale" : 0.2
             },
@@ -125,12 +126,12 @@ class EnvCfg(BasicCfg):
         cmd_cfg = {
             0:{
                 'name':'vel_x',
-                'init_low':-1.0,
-                'init_high':1.0,
-                'limit_low':-1.5,
-                'limit_high':1.5,
+                'init_low':-0.5,
+                'init_high':0.5,
+                'limit_low':-2.0,
+                'limit_high':2.0,
                 'local_range':0.5,
-                'num_bins':5,
+                'num_bins':21,
             },
             1:{
                 'name':'vel_y',
@@ -139,16 +140,16 @@ class EnvCfg(BasicCfg):
                 'limit_low':-0.6,
                 'limit_high':0.6,
                 'local_range':0.5,
-                'num_bins':1,
+                'num_bins':11,
             },
             2:{
                 'name':'vel_yaw',
-                'init_low':-1.0,
-                'init_high':1.0,
+                'init_low':-0.5,
+                'init_high':0.5,
                 'limit_low':-1.0,
                 'limit_high':1.0,
                 'local_range':0.5,
-                'num_bins':1,
+                'num_bins':11,
             }
 
         }
@@ -163,47 +164,50 @@ class EnvCfg(BasicCfg):
         limit_vel_yaw = [-1.0, 1.0]
     class rewards(BasicCfg.rewards):
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        only_positive_rewards_ji22_style = False
+        only_positive_rewards_ji22_style = True
+        soft_dof_vel_limit = 1.0
+        soft_torque_limit = 0.9
+        soft_dof_pos_limit = 1.0
+        base_height_target = 0.3
+        max_contact_force = 100. 
+
         sigma_rew_neg = 0.02
 
     class reward_scales:
         termination = -0.0
         tracking_lin_vel = 1.0
         tracking_ang_vel = 0.5
-
-        lin_vel_z = -0.02
+        lin_vel_z = -1.0
         ang_vel_xy = -0.001
-        
         dof_vel = -1e-4
-        dof_acc = -2.5e-7
-        collision = -0.1
-        action_rate = -0.001
-        
-        
+        # dof_acc = -1e-7
+        collision = -1.
         torques = -0.0001
-        feet_slip = -0.01
-        
-        action_smoothness_1 = -0.001
-        action_smoothness_2 = -0.001
-        # raibert_heuristic = -10.0
-        # feet_clearance_cmd_linear = -30
+        feet_slip = -0.04
+
+        action_rate = -0.001
+        action_smoothness_1 = -0.01
+        action_smoothness_2 = -0.01
+        orientation = -0.1
+        feet_clearance = -30.0
+        heuristic = -10.
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
-        randomize_rigids_after_start = True
+        randomize_rigids_after_start = False
         randomize_friction = True
-        friction_range = [0.1, 1.25] # increase range
+        friction_range = [0.3, 1.25] # increase range
         randomize_restitution = True
-        restitution_range = [0.0, 0.4]
+        restitution_range = [0.0, 0.2]
         randomize_base_mass = True
-        added_mass_range = [-1.0, 3.0]
-        randomize_com_displacement = True
+        added_mass_range = [-1.0, 1.0]
+        randomize_com_displacement = False
         com_displacement_range = [-0.15, 0.15]
         randomize_motor_strength = False
         motor_strength_range = [0.9, 1.1]
-        randomize_lag_timesteps = True
+        randomize_lag_timesteps = False
         lag_timesteps = 6
-        push_robots = True
+        push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
 
@@ -228,24 +232,26 @@ class RunnerCfg(BasicRunnerCfg):
         selective_adaptation_module_loss = False
     class policy:
         init_noise_std = 1.0
-        actor_hidden_dims = [512, 256, 128]
+        actor_hidden_dims = [256, 256]
         critic_hidden_dims = [512, 256, 128]
-        adaptation_module_branch_hidden_dims = [512, 256, 128]
+        adaptation_module_branch_hidden_dims = [ 256, 128]
 
-        num_history = 10
+        num_history = 5
         num_latent = 16
-        activation = 'lrelu'
+        activation = 'relu'
     class runner:
-        run_name = 'TCN_10'
+        run_name = 'noraml_stage3_001'
         experiment_name = 'Lips'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 1500 # number of policy updates
         # logging
-        save_interval = 2000 # check for potential saves every this many iterations
+        save_interval = 1000 # check for potential saves every this many iterations
         # load and resume
         resume = False
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt 
+        use_lips = True
+        stage = 1
 

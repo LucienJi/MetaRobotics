@@ -125,12 +125,12 @@ class EnvCfg(BasicCfg):
         cmd_cfg = {
             0:{
                 'name':'vel_x',
-                'init_low':-1.0,
-                'init_high':1.0,
+                'init_low':-0.5,
+                'init_high':0.5,
                 'limit_low':-1.5,
                 'limit_high':1.5,
                 'local_range':0.5,
-                'num_bins':5,
+                'num_bins':11,
             },
             1:{
                 'name':'vel_y',
@@ -139,16 +139,16 @@ class EnvCfg(BasicCfg):
                 'limit_low':-0.6,
                 'limit_high':0.6,
                 'local_range':0.5,
-                'num_bins':1,
+                'num_bins':11,
             },
             2:{
                 'name':'vel_yaw',
-                'init_low':-1.0,
-                'init_high':1.0,
+                'init_low':-0.5,
+                'init_high':0.5,
                 'limit_low':-1.0,
                 'limit_high':1.0,
                 'local_range':0.5,
-                'num_bins':1,
+                'num_bins':11,
             }
 
         }

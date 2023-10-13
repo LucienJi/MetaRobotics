@@ -35,7 +35,7 @@ def launch(args):
 if __name__ == '__main__':
     args = get_args()
     env, runner , env_cfg ,train_cfg = launch(args)
-    runner.learn(num_learning_iterations=100)
+    runner.learn(num_learning_iterations=5000)
 
     
     

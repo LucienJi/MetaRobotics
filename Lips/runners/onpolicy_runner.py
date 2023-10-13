@@ -5,7 +5,7 @@ from collections import deque
 
 from utils.torch_utils import VecEnv,class_to_dict,dump_info,NumpyEncoder
 from Lips.configs.training_config import RunnerCfg
-from Lips.modules.ac import ActorCritic
+from Lips.modules.ac import LipsActorCritic as ActorCritic
 from Lips.algorithms.ppo import PPO  
 import torch 
 import numpy as np 
@@ -20,6 +20,7 @@ class Runner:
         self.ppo_cfg = cfg.algorithm
 
         policy_cfg = class_to_dict(self.policy_cfg)
+        self.lips_stage = self.cfg.stage
         actor_critic = ActorCritic(self.env.num_obs,
                                       self.env.num_privileged_obs,
                                       self.env.num_obs_history,
@@ -47,6 +48,7 @@ class Runner:
         self.env.reset()
 
     def learn(self, num_learning_iterations):
+        mean_adaptation_module_loss = 0.0 
         self.save_cfg()
         if self.log_dir is not None and self.writer is None:
             self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
@@ -66,36 +68,37 @@ class Runner:
             start = time.time()
             # Rollout
             with torch.inference_mode():
-                for i in range(self.num_steps_per_env):
-                    actions = self.alg.act_student(obs_dict["obs"],obs_dict["privileged_obs"], obs_dict["obs_history"])
-                    ret = self.env.step(actions)
-                    obs_dict, rewards, dones, infos = ret
-                    for k,v in obs_dict.items():
-                        obs_dict[k] = v.to(self.device)
-                    self.alg.process_env_step(rewards, dones, infos)
-                    if self.log_dir is not None:
-                        # Book keeping
-                        if 'train/episode' in infos:
-                            ep_infos.append(infos['train/episode'])
-                        cur_reward_sum += rewards
-                        cur_episode_length += 1
-                        new_ids = (dones > 0).nonzero(as_tuple=False)
-                        rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
-                        lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
-                        #! 清空历史: 
-                        self.env.reset_history(new_ids[:, 0])
-                        cur_reward_sum[new_ids] = 0
-                        cur_episode_length[new_ids] = 0
+                with torch.no_grad():
+                    for i in range(self.num_steps_per_env):
+                        actions = self.alg.act_student(obs_dict["obs"],obs_dict["privileged_obs"], obs_dict["obs_history"])
+                        ret = self.env.step(actions)
+                        obs_dict, rewards, dones, infos = ret
+                        for k,v in obs_dict.items():
+                            obs_dict[k] = v.to(self.device)
+                        self.alg.process_env_step(rewards, dones, infos)
+                        if self.log_dir is not None:
+                            # Book keeping
+                            if 'train/episode' in infos:
+                                ep_infos.append(infos['train/episode'])
+                            cur_reward_sum += rewards
+                            cur_episode_length += 1
+                            new_ids = (dones > 0).nonzero(as_tuple=False)
+                            rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                            lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
+                            #! 清空历史: 
+                            cur_reward_sum[new_ids] = 0
+                            cur_episode_length[new_ids] = 0
 
 
-                stop = time.time()
-                collection_time = stop - start
+                    stop = time.time()
+                    collection_time = stop - start
 
-                # Learning step
-                start = stop
-                self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'])
+                    # Learning step
+                    start = stop
+                    self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'])
 
-            mean_value_loss, mean_surrogate_loss,mean_entropy_loss, mean_adaptation_module_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_k_sl_loss,mean_l2_loss,mean_penality,\
+                 mean_max_jacob,mean_min_jacob,mean_mean_jacob = self.alg.update(self.lips_stage)
             stop = time.time()
             learn_time = stop - start
             if it % self.save_interval == 0:
@@ -165,6 +168,13 @@ class Runner:
 
         self.writer.add_scalar('Loss/value_function', locs['mean_value_loss'], locs['it'])
         self.writer.add_scalar('Loss/Adaptation_module', locs['mean_adaptation_module_loss'], locs['it'])
+        # mean_k_sl_loss,mean_l2_loss,mean_penality
+        self.writer.add_scalar('Loss/K_SL_Loss', locs['mean_k_sl_loss'], locs['it'])
+        self.writer.add_scalar('Loss/L2_Loss', locs['mean_l2_loss'], locs['it'])
+        self.writer.add_scalar('Loss/Penality', locs['mean_penality'], locs['it'])
+        self.writer.add_scalar('Loss/Max Jacob', locs['mean_max_jacob'], locs['it'])
+        self.writer.add_scalar('Loss/Min Jacob', locs['mean_min_jacob'], locs['it'])
+        self.writer.add_scalar('Loss/Mean Jacob', locs['mean_mean_jacob'], locs['it'])
         self.writer.add_scalar('Loss/surrogate', locs['mean_surrogate_loss'], locs['it'])
         self.writer.add_scalar('Loss/entropy', locs['mean_entropy_loss'], locs['it'])
         self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, locs['it'])
@@ -193,6 +203,12 @@ class Runner:
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Adaptation loss:':>{pad}} {locs['mean_adaptation_module_loss']:.4f}\n"""
+                          f"""{'K_SL_Loss:':>{pad}} {locs['mean_k_sl_loss']:.4f}\n"""
+                          f"""{'L2_Loss:':>{pad}} {locs['mean_l2_loss']:.4f}\n"""
+                          f"""{'Penality:':>{pad}} {locs['mean_penality']:.4f}\n"""
+                          f"""{'Max Jacob:':>{pad}} {locs['mean_max_jacob']:.4f}\n"""
+                          f"""{'Min Jacob:':>{pad}} {locs['mean_min_jacob']:.4f}\n"""
+                          f"""{'Mean Jacob:':>{pad}} {locs['mean_mean_jacob']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
@@ -207,6 +223,12 @@ class Runner:
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Adaptation loss:':>{pad}} {locs['mean_adaptation_module_loss']:.4f}\n"""
+                          f"""{'K_SL_Loss:':>{pad}} {locs['mean_k_sl_loss']:.4f}\n"""
+                          f"""{'L2_Loss:':>{pad}} {locs['mean_l2_loss']:.4f}\n"""
+                          f"""{'Penality:':>{pad}} {locs['mean_penality']:.4f}\n"""
+                          f"""{'Max Jacob:':>{pad}} {locs['mean_max_jacob']:.4f}\n"""
+                          f"""{'Min Jacob:':>{pad}} {locs['mean_min_jacob']:.4f}\n"""
+                          f"""{'Mean Jacob:':>{pad}} {locs['mean_mean_jacob']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n""")

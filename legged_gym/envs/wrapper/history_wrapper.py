@@ -21,7 +21,6 @@ class HistoryWrapper(gym.Wrapper):
         obs,privileged_obs, rew, done, info = self.env.step(action)
         new_ids = info['reset_env_ids']
         self.obs_history[new_ids, :] = 0
-        # self.obs_history = torch.cat((self.obs_history[:, self.env.num_obs:], obs), dim=-1)
         self.obs_history = torch.cat((self.obs_history[:, 1:], obs.unsqueeze(1)), dim=1)
         return {'obs': obs, 'privileged_obs': privileged_obs, 
                 'obs_history': self.obs_history,

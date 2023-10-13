@@ -17,10 +17,14 @@ class VAE(nn.Module):
         self.num_latent = num_latent 
 
         # Build Encoder
-        self.encoder = TCNHistoryEncoder(num_obs = num_obs,
-                                         num_history = num_history,
-                                         num_latent = num_latent * 4, #! 中间翻个倍
-                                         activation = activation)
+    
+        self.encoder = MLPHistoryEncoder(
+            num_obs = num_obs,
+            num_history=num_history,
+            num_latent=num_latent * 4,
+            activation=activation,
+            adaptation_module_branch_hidden_dims=[512, 256],
+        )
         self.latent_mu = nn.Linear(num_latent * 4, num_latent)
         self.latent_var = nn.Linear(num_latent * 4, num_latent)
 
@@ -169,8 +173,6 @@ class TCNHistoryEncoder(nn.Module):
 class MLPHistoryEncoder(nn.Module):
     def __init__(self, 
                  num_obs,
-                 num_privileged_obs,
-                 num_obs_history,
                  num_history,
                  num_latent,
                  activation = 'elu',

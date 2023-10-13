@@ -3,8 +3,8 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 from utils.torch_utils import  get_activation, MultivariateGaussianDiagonalCovariance, init_orhtogonal
-from .adaptation_module import TCNHistoryEncoder, MLPExpertEncoder
-from .lipsnet import LipsNet 
+from .lipsnet import LipsNet, ExpLipsNet    
+from functorch import jacrev, vmap
 
 class BaseActor(nn.Module):
     def __init__(self, 
@@ -16,7 +16,7 @@ class BaseActor(nn.Module):
                  activation = 'elu',
                  actor_hidden_dims = [512, 256, 128],):
         super().__init__()
-        mlp_input_dim_a = num_obs + num_latent  
+        mlp_input_dim_a = num_obs   
         actor_layers = []
         activation_fn = get_activation(activation)
         actor_layers.extend(
@@ -31,13 +31,19 @@ class BaseActor(nn.Module):
                 actor_layers.append(activation_fn)
         self.actor_body = nn.Sequential(*actor_layers)
 
-    def forward(self,obs,latent_dim):
+    def forward(self,obs):
         """
         obs.shape = (bz, obs_dim)
         """
-        input = torch.cat([obs, latent_dim], dim = 1)
+        input = obs
         output = self.actor_body(input)
         return output
+    
+    def check_jacob(self,x):
+        with torch.no_grad():
+            jacobi = vmap(jacrev(self.actor_body))(x)
+        jac_norm = torch.norm(jacobi, 2, dim=(1,2)).unsqueeze(1)
+        return jac_norm
     
 class LipsActor(nn.Module):
     def __init__(self, 
@@ -49,36 +55,51 @@ class LipsActor(nn.Module):
                  activation = 'lrelu',
                  actor_hidden_dims = [512, 256, 128],):
         super().__init__()
-        mlp_input_dim_a = num_obs + num_latent  
-        actor_layers = []
+        mlp_input_dim_a = num_obs   
         activation_fn = get_activation(activation)
-        actor_layers.extend(
-            [nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]),
-            activation_fn]
-            )   
-        for l in range(len(actor_hidden_dims)):
-            if l == len(actor_hidden_dims) - 1:
-                pass
-            else:
-                actor_layers.append(nn.Linear(actor_hidden_dims[l],actor_hidden_dims[l + 1]))
-                actor_layers.append(activation_fn)
-        self.actor_body = nn.Sequential(*actor_layers)
+        identity_fn = get_activation('identity')
+        k_act_fn = get_activation('tanh')
 
-        self.lipnet = LipsNet(
-            f_sizes=[actor_hidden_dims[-1], actor_hidden_dims[-1],num_actions],
-            f_hid_nonliear=nn.LeakyReLU,
-            k_sizes=[actor_hidden_dims[-1],actor_hidden_dims[-1],1],
-            k_hid_act=nn.LeakyReLU,
-            global_lips=False
+        self.lipnet = ExpLipsNet(
+            f_sizes=[mlp_input_dim_a] + actor_hidden_dims + [num_actions],
+            k_sizes=[mlp_input_dim_a] + actor_hidden_dims + [1],
+            global_lips=False,
+            k_init=25,
+            k_max=50,
+            f_hid_nonliear=activation_fn,
+            f_out_nonliear=identity_fn,
+            k_hid_act=k_act_fn,
+            k_out_act=identity_fn,
+            loss_lambda=0.001,
+            eps=1e-4,
+            squash_action=False,
         )
 
-    def forward(self,obs,latent_dim):
+    def forward(self,obs):
         """
         obs.shape = (bz, obs_dim)
         """
-        input = torch.cat([obs, latent_dim], dim = 1)
-        output = self.actor_body(input)
-        output = self.lipnet(output)
+        output = self.lipnet.lips_forward(obs)
+        return output
+    def raw_forward(self,obs):
+        """
+        Stage 1: nominal forward 
+        """
+        output = self.lipnet.raw_forward(obs)
+        return output
+    def sl_k_loss(self,obs):
+        """
+        obs.shape = (bz, obs_dim)
+        """
+        output = self.lipnet.sl_k_loss(obs)
+        return output
+    
+    def reg_loss(self,obs):
+        output = self.lipnet.l2_regularization(obs)
+        return output
+
+    def raw_jacob_check(self,obs,ord = 2):
+        output = self.lipnet.raw_jacob_check(obs,ord)
         return output
 
 class BaseCritic(nn.Module):
@@ -115,7 +136,7 @@ class BaseCritic(nn.Module):
         output = self.critic_body(input)
         return output
 
-class ActorCritic(nn.Module):
+class NorminalActorCritic(nn.Module):
     def __init__(self, 
                  num_obs,
                  num_privileged_obs,
@@ -123,36 +144,19 @@ class ActorCritic(nn.Module):
                  num_actions,
                  num_latent,
                  num_history,
-                 activation = 'elu',
+                 activation = 'relu',
                  actor_hidden_dims = [512, 256, 128],
                  critic_hidden_dims = [512, 256, 128],
                  adaptation_module_branch_hidden_dims = [256, 128],
                  init_noise_std = 1.0):
         super().__init__()
 
-        # Expert Module 
-        self.expert_encoder = MLPExpertEncoder(
-            num_obs=num_obs,
-            num_privileged_obs=num_privileged_obs,
-            num_latent=num_latent,
-            activation=activation,
-            adaptation_module_branch_hidden_dims=adaptation_module_branch_hidden_dims,
-        )
-
-        # Adaptation Module
-        self.adaptation_module = TCNHistoryEncoder(
-            num_obs = num_obs,
-            num_history = num_history,
-            num_latent=num_latent,
-            activation=activation,
-        )
-
         # Actor Module
-        self.actor = LipsActor(
+        self.actor = BaseActor(
             num_obs=num_obs,
             num_privileged_obs=num_privileged_obs,
             num_obs_history=num_obs_history,
-            num_latent=num_latent,
+            num_latent=0,
             num_actions=num_actions,
             activation=activation,
             actor_hidden_dims=actor_hidden_dims,
@@ -168,15 +172,13 @@ class ActorCritic(nn.Module):
             num_obs=num_obs,
             num_privileged_obs=num_privileged_obs,
             num_obs_history=num_obs_history,
-            num_latent=num_latent,
+            num_latent=0,
             num_actions=num_actions,
             activation=activation,
             actor_hidden_dims=critic_hidden_dims,
         )
         Normal.set_default_validate_args = False
 
-        self.expert_encoder.apply(init_orhtogonal)
-        self.adaptation_module.apply(init_orhtogonal)
         self.actor.apply(init_orhtogonal)
         self.critic.apply(init_orhtogonal)
         
@@ -193,34 +195,110 @@ class ActorCritic(nn.Module):
         return self.distribution.entropy().sum(dim=-1)
 
     
-    def act_student(self, obs, privileged_obs, obs_history):
+    def act(self, obs, privileged_obs, obs_history):
         # obs_dict: obs, obs_history, privileged_obs
-        latent = self.adaptation_module.forward(obs_history)
-        action_mean = self.actor.forward(obs, latent)
+        action_mean = self.actor.forward(obs)
         self.distribution.update(action_mean)
         return self.distribution.sample()
 
-    def act_expert(self, obs, privileged_obs, obs_history):
-        # obs_dict: obs, obs_history, privileged_obs
-        latent = self.expert_encoder.forward(obs, privileged_obs)
-        action_mean = self.actor.forward(obs, latent)
+    def get_actions_log_prob(self,actions):
+        return self.distribution.get_actions_log_prob(actions)
+
+    def act_inference(self,obs_dict):
+        return self.actor.forward(obs_dict['obs'])
+
+    def evaluate(self,obs,privileged_observations):
+        value = self.critic.forward(obs, privileged_observations)
+        return value 
+        
+class LipsActorCritic(nn.Module):
+    def __init__(self, 
+                 num_obs,
+                 num_privileged_obs,
+                 num_obs_history,
+                 num_actions,
+                 num_latent,
+                 num_history,
+                 activation = 'relu',
+                 actor_hidden_dims = [256, 256],
+                 critic_hidden_dims = [512, 256, 128],
+                 adaptation_module_branch_hidden_dims = [256, 128],
+                 inference_stage = 1,
+                 init_noise_std = 1.0):
+        super().__init__()
+        self.inference_stage = inference_stage
+        # Actor Module
+        self.actor = LipsActor(
+            num_obs=num_obs,
+            num_privileged_obs=num_privileged_obs,
+            num_obs_history=num_obs_history,
+            num_latent=0,
+            num_actions=num_actions,
+            activation=activation,
+            actor_hidden_dims=actor_hidden_dims,
+        )
+        self.distribution = MultivariateGaussianDiagonalCovariance(
+            dim = num_actions,
+            init_std=init_noise_std,
+        )
+        
+        # Critic Module
+
+        self.critic = BaseCritic(
+            num_obs=num_obs,
+            num_privileged_obs=num_privileged_obs,
+            num_obs_history=num_obs_history,
+            num_latent=0,
+            num_actions=num_actions,
+            activation=activation,
+            actor_hidden_dims=critic_hidden_dims,
+        )
+        Normal.set_default_validate_args = False
+        self.critic.apply(init_orhtogonal)
+        
+    @property
+    def action_mean(self):
+        return self.distribution.mean
+
+    @property
+    def action_std(self):
+        return self.distribution.stddev
+
+    @property
+    def entropy(self):
+        return self.distribution.entropy().sum(dim=-1)
+    
+    def _raw_forward(self,obs):
+        action_mean = self.actor.raw_forward(obs)
         self.distribution.update(action_mean)
         return self.distribution.sample()
+    def _lips_forward(self,obs):
+        action_mean = self.actor.forward(obs)
+        self.distribution.update(action_mean)
+        return self.distribution.sample()
+
     
-    def get_student_latent(self,obs_history):
-        return self.adaptation_module.forward(obs_history)
-    def get_expert_latent(self,obs,privileged_obs):
-        return self.expert_encoder.forward(obs, privileged_obs)
+    def act(self, obs, privileged_obs, obs_history,stage = 1):
+        # obs_dict: obs, obs_history, privileged_obs
+        if stage == 1:
+            # raw
+            return self._raw_forward(obs)
+        elif stage == 3:
+            # lips
+            return self._lips_forward(obs)
+        else:
+            return self._raw_forward(obs)
 
 
     def get_actions_log_prob(self,actions):
         return self.distribution.get_actions_log_prob(actions)
 
     def act_inference(self,obs_dict):
-        latent = self.adaptation_module.forward(obs_dict['obs_history'])
-        return self.actor.forward(obs_dict['obs'], latent)
+        if self.inference_stage == 3:
+            return self.actor.forward(obs_dict['obs'])
+        else:
+            return self.actor.raw_forward(obs_dict['obs'])
 
     def evaluate(self,obs,privileged_observations):
         value = self.critic.forward(obs, privileged_observations)
         return value 
-        

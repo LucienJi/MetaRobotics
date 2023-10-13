@@ -131,8 +131,77 @@ class MultivariateGaussianDiagonalCovariance2(nn.Module):
     def mean(self):
         return self.distribution.mean
 
+MIN_LOG_NN_OUTPUT = -5
+MAX_LOG_NN_OUTPUT = 2
+SMALL_NUMBER = 1e-6
+class SquashedGaussian(nn.Module):
+    def __init__(self, dim, low, high, init_std = 1.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.std = nn.Parameter(init_std * torch.ones(dim))
+        self.distribution = None
+        self.last_log_prob = None
+        Normal.set_default_validate_args = False
+        assert np.all(np.less(low, high))
+        low = torch.from_numpy(np.array(low))
+        high = torch.from_numpy(np.array(high))
+        self.low = nn.Parameter(low, requires_grad=False)
+        self.high = nn.Parameter(high, requires_grad=False)
+        
+    
+    @property
+    def mean(self):
+        return self._squash(self.distribution.mean)
+    
+    @property
+    def stddev(self):
+        return self.distribution.stddev
+    
+    def update(self,logits):
+        self.distribution = Normal(logits, self.std.reshape(self.dim))
 
+    def sample(self):
+        samples = self.distribution.sample()
+        squashed_samples = self._squash(samples)
+        return squashed_samples
 
+    def get_actions_log_prob(self,actions):
+        # actions are fron [low, high]
+        unsquashed_actions = self._unsquash(actions)
+        actions_log_prob = self.distribution.log_prob(unsquashed_actions)
+        actions_log_prob = torch.clamp(actions_log_prob,-100,100)
+        actions_log_prob = actions_log_prob.sum(dim=-1)
+
+        unsquashed_values_tanhd = torch.tanh(unsquashed_actions)
+        log_prob = actions_log_prob - torch.sum(
+            torch.log(1 - unsquashed_values_tanhd**2 + SMALL_NUMBER), dim=-1
+        )
+        self.last_log_prob = log_prob
+        return log_prob
+
+    def entropy(self):
+        # squashed entropy estimated 
+        return torch.mean(-self.last_log_prob, dim=0) 
+    
+        
+    def _squash(self, raw_values):
+        # From -inf, inf 
+        # Returned values are within [low, high] (including `low` and `high`).
+        squashed = ((torch.tanh(raw_values) + 1.0) / 2.0) * (
+            self.high - self.low
+        ) + self.low
+        return torch.clamp(squashed, self.low, self.high)
+
+    def _unsquash(self, values):
+        # From [low, high] (including `low` and `high`)
+        # Returned values are within [-inf, inf]. 
+        normed_values = (values - self.low) / (self.high - self.low) * 2.0 - 1.0
+        # Stabilize input to atanh.
+        save_normed_values = torch.clamp(
+            normed_values, -1.0 + SMALL_NUMBER, 1.0 - SMALL_NUMBER
+        )
+        unsquashed = torch.atanh(save_normed_values)
+        return unsquashed
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):

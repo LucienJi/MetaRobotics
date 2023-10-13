@@ -1,4 +1,4 @@
-from Lips.modules.ac import ActorCritic
+from Lips.modules.ac import LipsActorCritic as ActorCritic
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,11 +18,6 @@ class PPO:
         self.storage = None  # initialized later
         #! 这个是可以优化 expert 的优化器
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate)
-
-        ## Supervised learning for adaptation module
-        self.adaptation_module_optimizer = optim.Adam(self.actor_critic.adaptation_module.parameters(),
-                                                      lr=self.cfg.adaptation_module_learning_rate)
-
         self.transition = RolloutStorage.Transition()
 
         self.learning_rate = self.cfg.learning_rate
@@ -39,9 +34,9 @@ class PPO:
     def train_mode(self):
         self.actor_critic.train()
 
-    def act_student(self, obs, privileged_obs, obs_history):
+    def act_student(self, obs, privileged_obs, obs_history,stage = 1):
         # Compute the actions and values
-        self.transition.actions = self.actor_critic.act_student(obs, privileged_obs, obs_history).detach()
+        self.transition.actions = self.actor_critic.act(obs, privileged_obs, obs_history,stage).detach()
         self.transition.values = self.actor_critic.evaluate(obs, privileged_obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
@@ -70,11 +65,17 @@ class PPO:
         last_values = self.actor_critic.evaluate(last_critic_obs, last_critic_privileged_obs).detach()
         self.storage.compute_returns(last_values, self.cfg.gamma, self.cfg.lam)
 
-    def update(self):
+    def update(self,stage = 1):
         mean_value_loss = 0
         mean_entropy_loss = 0
         mean_surrogate_loss = 0
-        mean_adaptation_module_loss = 0
+        mean_k_sl_loss = 0
+        mean_penality = 0 
+        mean_l2_loss = 0 
+
+        mean_max_jacob = 0
+        mean_min_jacob = 0
+        mean_mean_jacob = 0
         
         generator = self.storage.mini_batch_generator(self.cfg.num_mini_batches, self.cfg.num_learning_epochs)
         for obs_batch, critic_obs_batch, privileged_obs_batch, obs_history_batch, actions_batch,\
@@ -82,7 +83,7 @@ class PPO:
             old_mu_batch, old_sigma_batch, env_bins_batch in generator:
 
             #! Training  Expert 
-            self.actor_critic.act_expert(obs_batch, privileged_obs_batch, obs_history_batch)
+            self.actor_critic.act(obs_batch, privileged_obs_batch, obs_history_batch,stage)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
             value_batch = self.actor_critic.evaluate(obs_batch, privileged_obs_batch)
             mu_batch = self.actor_critic.action_mean
@@ -125,6 +126,31 @@ class PPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             loss = surrogate_loss + self.cfg.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            
+            if stage == 2:
+                #! Supervised Learning for K 
+                sl_loss = self.actor_critic.actor.sl_k_loss(obs_batch) 
+                loss += sl_loss['loss']
+                mean_k_sl_loss += sl_loss['sl_loss']
+                mean_penality += sl_loss['penality']
+                mean_max_jacob += sl_loss['max_jacob']
+                mean_min_jacob += sl_loss['min_jacob']
+                mean_mean_jacob += sl_loss['mean_jacob']
+            elif stage == 1:
+                jacob_info = self.actor_critic.actor.raw_jacob_check(obs_batch,ord = 2)
+                mean_max_jacob += jacob_info['max_jacob']
+                mean_min_jacob += jacob_info['min_jacob']
+                mean_mean_jacob += jacob_info['mean_jacob']
+
+            elif stage == 3:
+                #! Lips Loss 
+                reg_loss = self.actor_critic.actor.reg_loss(obs_batch)
+                loss += reg_loss['loss']
+                mean_l2_loss += reg_loss['l2_loss']
+                mean_penality += reg_loss['penality']
+                mean_max_jacob += reg_loss['max_jacob']
+                mean_min_jacob += reg_loss['min_jacob']
+                mean_mean_jacob += reg_loss['mean_jacob']
 
             # Gradient step
             self.optimizer.zero_grad()
@@ -136,30 +162,22 @@ class PPO:
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy_loss += entropy_batch.mean().item()
 
-            data_size = privileged_obs_batch.shape[0]
-            num_train = int(data_size // 5 * 4)
 
-            # Adaptation module gradient step
-
-            for epoch in range(self.cfg.num_adaptation_module_substeps):
-
-                adaptation_pred = self.actor_critic.get_student_latent(obs_history_batch)
-                with torch.no_grad():
-                    adaptation_target = self.actor_critic.get_expert_latent(obs_batch, privileged_obs_batch)
-
-                adaptation_loss = F.mse_loss(adaptation_pred, adaptation_target)
-                self.adaptation_module_optimizer.zero_grad()
-                adaptation_loss.backward()
-                self.adaptation_module_optimizer.step()
-
-                mean_adaptation_module_loss += adaptation_loss.item()
-
+    
         num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
         mean_entropy_loss /= num_updates
-        mean_adaptation_module_loss /= (num_updates * self.cfg.num_adaptation_module_substeps)
+        mean_k_sl_loss /= num_updates
+        mean_l2_loss /= num_updates
+        mean_penality /= num_updates
+        mean_max_jacob /= num_updates
+        mean_min_jacob /= num_updates
+        mean_mean_jacob /= num_updates
+
       
         self.storage.clear()
 
-        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss, mean_adaptation_module_loss
+        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss,\
+            mean_k_sl_loss,mean_l2_loss,mean_penality,\
+            mean_max_jacob,mean_min_jacob,mean_mean_jacob

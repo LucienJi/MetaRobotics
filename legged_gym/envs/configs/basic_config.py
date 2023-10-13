@@ -253,7 +253,7 @@ class BasicCfg:
         tracking_contacts_shaped_vel = 0.9
 
     class init_state:
-        pos = [0.0, 0.0, 0.34]  # x,y,z [m]
+        pos = [0.0, 0.0, 0.32]  # x,y,z [m]
         rot = [0.0, 0.0, 0.0, 1.0]  # x,y,z,w [quat]
         lin_vel = [0.0, 0.0, 0.0]  # x,y,z [m/s]
         ang_vel = [0.0, 0.0, 0.0]  # x,y,z [rad/s]
@@ -281,6 +281,8 @@ class BasicCfg:
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         hip_scale_reduction = 0.5
+        # action_scale = 1.0
+        # hip_scale_reduction = 1.0
         control_type = 'P' #'P'  # P: position, V: velocity, T: torques
         decimation = 4
 
@@ -351,7 +353,7 @@ class BasicCfg:
 
     class rewards:
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        only_positive_rewards_ji22_style = True
+        only_positive_rewards_ji22_style = False
         sigma_rew_neg = 0.02
 
         # reward_container_name = "CoRLRewards"
@@ -362,7 +364,7 @@ class BasicCfg:
         soft_dof_pos_limit = 0.9  # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
-        base_height_target = 0.34
+        base_height_target = 0.3
         max_contact_force = 100.  # forces above this value are penalized
         
         #! not immplemented in complex terrain
@@ -487,7 +489,7 @@ class BasicCfg:
             rest_offset = 0.0  # [m]
             bounce_threshold_velocity = 0.5  # 0.5 [m/s]
             max_depenetration_velocity = 1.0
-            max_gpu_contact_pairs = 2 ** 24  # 2**24 -> needed for 8000 envs and more
+            max_gpu_contact_pairs = 2 ** 23  # 2**24 -> needed for 8000 envs and more
             default_buffer_size_multiplier = 5
             contact_collection = 2  # 0: never, 1: last sub-step, 2: all sub-steps (default=2)
 

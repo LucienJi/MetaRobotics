@@ -1,4 +1,5 @@
-from Expert.modules.ac import ActorCritic
+from Expert.modules.ac import NominalActorCritic as ActorCritic
+# from Expert.modules.ac import SqashedActorCritic as ActorCritic
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -20,8 +21,8 @@ class PPO:
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate)
 
         ## Supervised learning for adaptation module
-        self.adaptation_module_optimizer = optim.Adam(self.actor_critic.adaptation_module.parameters(),
-                                                      lr=self.cfg.adaptation_module_learning_rate)
+        # self.adaptation_module_optimizer = optim.Adam(self.actor_critic.adaptation_module.parameters(),
+        #                                               lr=self.cfg.adaptation_module_learning_rate)
 
         self.transition = RolloutStorage.Transition()
 
@@ -41,8 +42,8 @@ class PPO:
 
     def act(self, obs, privileged_obs, obs_history):
         # Compute the actions and values
-        self.transition.actions = self.actor_critic.act(obs_history).detach()
-        self.transition.values = self.actor_critic.evaluate(obs_history, privileged_obs).detach()
+        self.transition.actions = self.actor_critic.act(obs,obs_history).detach()
+        self.transition.values = self.actor_critic.evaluate(obs,obs_history, privileged_obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
         self.transition.action_sigma = self.actor_critic.action_std.detach()
@@ -67,24 +68,22 @@ class PPO:
         self.transition.clear()
 
     def compute_returns(self, last_critic_obs, last_critic_privileged_obs, last_critic_obs_history):
-        last_values = self.actor_critic.evaluate(last_critic_obs_history, last_critic_privileged_obs).detach()
+        last_values = self.actor_critic.evaluate(last_critic_obs,last_critic_obs_history, last_critic_privileged_obs).detach()
         self.storage.compute_returns(last_values, self.cfg.gamma, self.cfg.lam)
 
     def update(self):
         mean_value_loss = 0
         mean_entropy_loss = 0
-        mean_surrogate_loss = 0
-        mean_adaptation_module_loss = 0
-        
+        mean_surrogate_loss = 0        
         generator = self.storage.mini_batch_generator(self.cfg.num_mini_batches, self.cfg.num_learning_epochs)
         
         self.actor_critic.train()
         for obs_batch, critic_observations_batch, privileged_obs_batch, obs_history_batch, actions_batch, target_values_batch, advantages_batch, returns_batch, \
                        old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, env_bins_batch in generator:
 
-            self.actor_critic.act(obs_history_batch)
+            self.actor_critic.act(obs_batch,obs_history_batch)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
-            value_batch = self.actor_critic.evaluate(obs_history_batch, privileged_obs_batch)
+            value_batch = self.actor_critic.evaluate(obs_batch,obs_history_batch, privileged_obs_batch)
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
@@ -136,30 +135,12 @@ class PPO:
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy_loss += entropy_batch.mean().item()
 
-            data_size = privileged_obs_batch.shape[0]
-            num_train = int(data_size // 5 * 4)
-
-            # Adaptation module gradient step
-
-            for epoch in range(self.cfg.num_adaptation_module_substeps):
-                adaptation_pred = self.actor_critic.get_student_latent(obs_history_batch)
-                with torch.no_grad():
-                    adaptation_target = privileged_obs_batch
-
-                adaptation_loss = F.mse_loss(adaptation_pred, adaptation_target)
-                self.adaptation_module_optimizer.zero_grad()
-                adaptation_loss.backward()
-                self.adaptation_module_optimizer.step()
-
-                mean_adaptation_module_loss += adaptation_loss.item()
-
         num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
         mean_entropy_loss /= num_updates
-        mean_adaptation_module_loss /= (num_updates * self.cfg.num_adaptation_module_substeps)
       
         self.storage.clear()
         self.actor_critic.eval()
 
-        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss, mean_adaptation_module_loss
+        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss

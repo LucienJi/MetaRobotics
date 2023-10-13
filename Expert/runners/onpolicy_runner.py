@@ -5,7 +5,8 @@ from collections import deque
 
 from utils.torch_utils import VecEnv,class_to_dict,dump_info,NumpyEncoder
 from Expert.configs.training_config import RunnerCfg
-from Expert.modules.ac import ActorCritic
+# from Expert.modules.ac import NominalActorCritic as ActorCritic
+from Expert.modules.ac import SqashedActorCritic as ActorCritic
 from Expert.algorithms.ppo import PPO  
 import torch 
 import numpy as np 
@@ -24,6 +25,8 @@ class Runner:
                                       self.env.num_privileged_obs,
                                       self.env.num_obs_history,
                                       self.env.num_actions,
+                                      action_low=self.env.delta_dof_pos_low,
+                                      action_high=self.env.delta_dof_pos_high,
                                       **policy_cfg,
                                       ).to(self.device)
 
@@ -47,6 +50,7 @@ class Runner:
         self.env.reset()
 
     def learn(self, num_learning_iterations):
+        mean_adaptation_module_loss = 0.0
         self.save_cfg()
         if self.log_dir is not None and self.writer is None:
             self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
@@ -82,8 +86,7 @@ class Runner:
                         new_ids = (dones > 0).nonzero(as_tuple=False)
                         rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
                         lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
-                        #! 清空历史: 
-                        self.env.reset_history(new_ids[:, 0])
+                        # self.env.reset_history(new_ids[:, 0])
                         cur_reward_sum[new_ids] = 0
                         cur_episode_length[new_ids] = 0
 
@@ -95,7 +98,7 @@ class Runner:
                 start = stop
                 self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'],obs_dict['obs_history'])
 
-            mean_value_loss, mean_surrogate_loss,mean_entropy_loss, mean_adaptation_module_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss,mean_entropy_loss = self.alg.update()
             stop = time.time()
             learn_time = stop - start
             if it % self.save_interval == 0:

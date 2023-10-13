@@ -4,10 +4,10 @@ import numpy as np
 
 class EnvCfg(BasicCfg):
     class env(BasicCfg.env):
-        num_envs = 100
+        num_envs = 4096
         num_observations = 45
         num_actions = 12
-        num_observation_history = 10
+        num_observation_history = 5
         episode_length_s = 20  # episode length in seconds
 
         # ----------- Basic Observation ------------
@@ -25,13 +25,13 @@ class EnvCfg(BasicCfg):
         observe_imu = False
 
         # ---------- Privileged Observations ----------
-        num_privileged_obs = 18
+        num_privileged_obs = 17 * 11 
         privileged_future_horizon = 1
-        priv_observe_friction = True #! 1
-        priv_observe_restitution = True #! 1 
-        priv_observe_base_mass = True #! 1
-        priv_observe_com_displacement = True #! 3
-        priv_observe_motor_strength = True #! 12
+        priv_observe_friction = False #! 1
+        priv_observe_restitution = False #! 1 
+        priv_observe_base_mass = False #! 1
+        priv_observe_com_displacement = False #! 3
+        priv_observe_motor_strength = False #! 12
         priv_observe_foot_height = False #! 4
     class terrain(BasicCfg.terrain):   
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
@@ -43,78 +43,109 @@ class EnvCfg(BasicCfg):
         dynamic_friction = 1.0
         restitution = 0.
         # rough terrain only:
-        measure_heights = False
+        measure_heights = True
         # measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
         # measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
         measured_points_x = np.linspace(-0.8,0.8,17).tolist()
         measured_points_y = np.linspace(-0.5,0.5,11).tolist()
         curriculum = False # True
         selected = True # False # select a unique terrain type and pass all arguments
+        
         terrain_kwargs = {
+            "plane_terrain":{
+                "weight": 1.0,
+                "height" : 0.0
+            },
             'random_uniform_terrain': {
-                "weight": 2.0,
-                "min_height" : -0.02,
-                "max_height" : 0.02,
+                "weight": 10.0,
+                "min_height" : -0.05,
+                "max_height" : 0.05,
                 "step" : 0.005,
                 "downsampled_scale" : 0.2
             },
-            'sloped_terrain': {
-                "weight": 1.0,
-                "slope" : 0.5
-            },
+            # 'sloped_terrain': {
+            #     "weight": 1.0,
+            #     "slope" : 0.4
+            # },
             'pyramid_sloped_terrain': {
                 "weight": 1.0,
-                "slope" : 0.5,
+                "slope" : 0.4,
                 'platform_size':3.0
             },
             'wave_terrain':{
                 "weight": 1.0,
                 'num_waves': 2,
-                'amplitude': 1.0,
+                'amplitude': 0.5,
             },
-            'stairs_terrain':{
-                "weight": 1.0,
-                'step_height': 0.15,
-                'step_width': 0.5,
-            },
+            # 'stairs_terrain':{
+            #     "weight": 1.0,
+            #     'step_height': 0.15,
+            #     'step_width': 0.5,
+            # },
             'pyramid_stairs_terrain':{
                 "weight": 1.0,
-                'step_height': 0.15,
                 'step_width': 0.5,
+                'step_height': 0.15,
                 'platform_size': 2.0,
             },
             'stepping_stones_terrain':{
                 "weight": 1.0,
-                'stone_size': 1.0,
+                'stone_size': 1.5,
                 'stone_distance': 0.1,
-                'max_height': 0.2,
-                'platform_size': 1.0,
+                'max_height': 0.0,
+                'platform_size': 4.,
                 'depth': -10
             },
-            'gap_terrain':{
+            'discrete_obstacles_terrain':{
                 "weight": 1.0,
-                "gap_size": 0.5,
-                "platform_size": 0.5,
+                "max_height":0.2, 
+                "min_size" :1.0, 
+                "max_size" : 2.0, 
+                "num_rects" : 20, 
+                "platform_size":1.
             },
-            'pit_terrain':{
-                "weight": 2.0,
-                "depth": 0.5,
-                "platform_size": 4.0,
-            }
             
         }
         
-
         terrain_length = 8.
         terrain_width = 8.
         num_rows= 10 # number of terrain rows (levels)
         num_cols = 10 # number of terrain cols (types)
 
     class commands(BasicCfg.commands):
-        command_curriculum = False 
-        curriculum_type = None 
-        num_commands = 3
+        command_curriculum = True
+        cmd_cfg = {
+            0:{
+                'name':'vel_x',
+                'init_low':-0.5,
+                'init_high':0.5,
+                'limit_low':-2.0,
+                'limit_high':2.0,
+                'local_range':0.5,
+                'num_bins':21,
+            },
+            1:{
+                'name':'vel_y',
+                'init_low':-0.3,
+                'init_high':0.3,
+                'limit_low':-0.6,
+                'limit_high':0.6,
+                'local_range':0.5,
+                'num_bins':11,
+            },
+            2:{
+                'name':'vel_yaw',
+                'init_low':-0.5,
+                'init_high':0.5,
+                'limit_low':-1.0,
+                'limit_high':1.0,
+                'local_range':0.5,
+                'num_bins':11,
+            }
 
+        }
+        
+        num_commands = 3
         lin_vel_x = [-1.0, 1.0]  # min max [m/s]
         lin_vel_y =  [-0.6, 0.6]  # min max [m/s]
         ang_vel_yaw = [-1, 1]  # min max [rad/s]
@@ -151,12 +182,12 @@ class EnvCfg(BasicCfg):
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
-        randomize_rigids_after_start = False
+        randomize_rigids_after_start = True
         randomize_friction = True
         friction_range = [0.1, 3.0] # increase range
-        randomize_restitution = False
+        randomize_restitution = True
         restitution_range = [0.0, 0.4]
-        randomize_base_mass = False
+        randomize_base_mass = True
         # add link masses, increase range, randomize inertia, randomize joint properties
         added_mass_range = [-1.0, 3.0]
         randomize_com_displacement = False
@@ -181,12 +212,12 @@ class RunnerCfg(BasicRunnerCfg):
         critic_hidden_dims = [512, 256, 128]
         decoder_hidden_dims = [512, 256, 128]
 
-        num_history = 10
+        num_history = 5
         num_latent = 16 
         activation = 'elu'
     class runner:
         run_name = 'Test'
-        experiment_name = 'RMA'
+        experiment_name = 'DreamWaQ'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 1500 # number of policy updates

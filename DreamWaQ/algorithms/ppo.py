@@ -42,7 +42,7 @@ class PPO:
     def act_student(self, obs, privileged_obs, obs_history, base_vel):
         # Compute the actions and values
         self.transition.actions = self.actor_critic.act_student(obs, privileged_obs, obs_history).detach()
-        self.transition.values = self.actor_critic.evaluate(obs, privileged_obs).detach()
+        self.transition.values = self.actor_critic.evaluate(obs, privileged_obs,base_vel).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
         self.transition.action_sigma = self.actor_critic.action_std.detach()
@@ -68,15 +68,14 @@ class PPO:
         self.storage.add_transitions(self.transition)
         self.transition.clear()
 
-    def compute_returns(self, last_critic_obs, last_critic_privileged_obs):
-        last_values = self.actor_critic.evaluate(last_critic_obs, last_critic_privileged_obs).detach()
+    def compute_returns(self, last_critic_obs, last_critic_privileged_obs, last_base_vel):
+        last_values = self.actor_critic.evaluate(last_critic_obs, last_critic_privileged_obs,last_base_vel).detach()
         self.storage.compute_returns(last_values, self.cfg.gamma, self.cfg.lam)
 
     def update(self):
         mean_value_loss = 0
         mean_entropy_loss = 0
         mean_surrogate_loss = 0
-        mean_adaptation_module_loss = 0
         mean_recons_loss = 0
         mean_vel_loss = 0
         mean_kld_loss = 0
@@ -89,7 +88,7 @@ class PPO:
             #! Training  Student, encoder 是同时需要 RL 和 VAE  
             self.actor_critic.act_student(obs_batch, privileged_obs_batch, obs_history_batch)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
-            value_batch = self.actor_critic.evaluate(obs_batch, privileged_obs_batch)
+            value_batch = self.actor_critic.evaluate(obs_batch, privileged_obs_batch,base_vel_batch)
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
@@ -151,6 +150,7 @@ class PPO:
                 valid = (dones_batch == 0).squeeze()
                 vae_loss = torch.mean(vae_loss_dict['loss'][valid])
                 vae_loss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.vae.parameters(), self.cfg.max_grad_norm)
                 self.vae_optimizer.step()
                 with torch.no_grad():
                     recons_loss = torch.mean(vae_loss_dict['recons_loss'][valid])

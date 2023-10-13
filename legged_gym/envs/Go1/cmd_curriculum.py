@@ -338,8 +338,8 @@ class GridAdaptiveCurriculum:
         # print("CMD Debug: We resample !", task_rewards, success_thresholds)
         is_success = 1.
         for task_reward, success_threshold in zip(task_rewards, success_thresholds): # 需要多个 threshold 来判断是否成功
-            # print("CMD Iterative: ", is_success , task_reward)
             is_success = is_success * (task_reward > success_threshold).cpu()
+
         is_success = is_success.reshape(-1).numpy()
         is_success = is_success.nonzero()[0]
         # print(bin_inds.shape, is_success.shape)
@@ -352,12 +352,15 @@ class GridAdaptiveCurriculum:
         
         success_rate = self.success_num / (self.totoal_num + 1e-6)
         is_success = 1.
-        is_success = is_success * (success_rate > 0.8)
+        is_success = is_success * (success_rate > 0.5)
         is_success = is_success.nonzero()[0]
+
         self.weights[is_success] = np.clip(self.weights[is_success] + 0.2, 0, 1)
         adjacents = self.get_local_bins(is_success, ranges=self.local_ranges)
+
         for adjacent in adjacents:
             self.weights[adjacent] = np.clip(self.weights[adjacent] + 0.2, 0, 1)
+
         self.success_num = np.zeros(self.n_combinations)
         self.totoal_num = np.zeros(self.n_combinations)
         # print("CMD Debug: We Update !", is_success)

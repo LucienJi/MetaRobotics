@@ -157,7 +157,7 @@ class RewardLib:
             self._reward_stable_stride_helper = StrideRewardHelper(self.env.num_envs,self.env.feet_indices,self.env.device)
         
         contact = self.env.contact_forces[:, self.env.feet_indices, 2] > 1.
-        contact_filt = torch.logical_or(contact, self.env.last_contacts) 
+        contact_filt = torch.logical_and(contact, self.env.last_contacts) 
 
         first_contact = (self._reward_stable_stride_helper.feet_in_air > 0.) * contact_filt
         self._reward_stable_stride_helper.feet_in_air += self.env.dt 
@@ -176,13 +176,69 @@ class RewardLib:
         self._reward_stable_stride_helper.feet_in_air *= ~contact_filt
 
         # calculate reward 
-        period_cv, length_cv = self._reward_stable_stride_helper._compute_period_ratio() , self._reward_stable_stride_helper._compute_length_ratio() 
-        return period_cv + length_cv
+        period_cv = self._reward_stable_stride_helper._compute_period_ratio() 
+        return period_cv 
     def _reward_body_height(self):
         reference_heights = 0 
         body_height = self.env.base_pos[:, 2] - reference_heights
         height_target = self.env.cfg.rewards.base_height_target - reference_heights
         return torch.square(body_height - height_target)
+    # endregion
+
+    """ Custom Task Reward Functions """
+    # region
+    def _reward_feet_clearance(self):
+        phases = 1 - torch.abs(1.0 - torch.clip((self.env.foot_indices * 2.0) - 1.0, 0.0, 1.0) * 2.0)
+        foot_height = (self.env.foot_positions[:, :, 2]).view(self.env.num_envs, -1)# - reference_heights
+        target_height = self.env.foot_height.unsqueeze(1) * phases + 0.02 # offset for foot radius 2cm
+        rew_foot_clearance = torch.square(target_height - foot_height) * (1 - self.env.desired_contact_states)
+        return torch.sum(rew_foot_clearance, dim=1)
+    
+    def _reward_heuristic(self):
+        cur_footsteps_translated = self.env.foot_positions - self.env.base_pos.unsqueeze(1)
+        footsteps_in_body_frame = torch.zeros(self.env.num_envs, 4, 3, device=self.env.device)
+        for i in range(4):
+            footsteps_in_body_frame[:, i, :] = quat_apply_yaw(quat_conjugate(self.env.base_quat),
+                                                              cur_footsteps_translated[:, i, :])
+
+        # nominal positions: [FR, FL, RR, RL]
+        
+        desired_stance_width = 0.3
+        desired_ys_nom = torch.tensor([desired_stance_width / 2,  -desired_stance_width / 2, desired_stance_width / 2, -desired_stance_width / 2], device=self.env.device).unsqueeze(0)
+
+        desired_stance_length = 0.45
+        desired_xs_nom = torch.tensor([desired_stance_length / 2,  desired_stance_length / 2, -desired_stance_length / 2, -desired_stance_length / 2], device=self.env.device).unsqueeze(0)
+
+        # raibert offsets
+        phases = torch.abs(1.0 - (self.env.foot_indices * 2.0)) * 1.0 - 0.5
+        frequencies = self.env.freq
+        x_vel_des = self.env.commands[:, 0:1]
+        yaw_vel_des = self.env.commands[:, 2:3]
+        y_vel_des = yaw_vel_des * desired_stance_length / 2
+
+        desired_ys_offset = phases * y_vel_des * (0.5 / frequencies.unsqueeze(1))
+        desired_ys_offset[:, 2:4] *= -1
+        desired_xs_offset = phases * x_vel_des * (0.5 / frequencies.unsqueeze(1))
+
+        desired_ys_nom = desired_ys_nom + desired_ys_offset
+        desired_xs_nom = desired_xs_nom + desired_xs_offset
+
+        desired_footsteps_body_frame = torch.cat((desired_xs_nom.unsqueeze(2), desired_ys_nom.unsqueeze(2)), dim=2)
+
+        err_raibert_heuristic = torch.abs(desired_footsteps_body_frame - footsteps_in_body_frame[:, :, 0:2])
+
+        reward = torch.sum(torch.square(err_raibert_heuristic), dim=(1, 2))
+
+        return reward
+    
+    def _set_freq(self,env_ids,freq):
+        self.env.freq[env_ids] = freq[env_ids]
+    def _set_phases(self,env_ids,phase):
+        self.env.offsets[env_ids] = phase[env_ids]
+        self.env.bounds[env_ids] = phase[env_ids]
+    def _set_foot_height(self,env_ids,height):
+        
+        self.env.foot_height[env_ids] = height[env_ids]
     # endregion
 
 
@@ -201,7 +257,7 @@ class RewardLib:
 
         reward = 0
         for i in range(4):
-            reward += - (1 - desired_contact[:, i]) * (
+            reward +=  (1 - desired_contact[:, i]) * (
                         1 - torch.exp(-1 * foot_forces[:, i] ** 2 / self.env.cfg.rewards.gait_force_sigma))
         return reward / 4
 
@@ -210,7 +266,7 @@ class RewardLib:
         desired_contact = self.env.desired_contact_states
         reward = 0
         for i in range(4):
-            reward += - (desired_contact[:, i] * (
+            reward += (desired_contact[:, i] * (
                         1 - torch.exp(-1 * foot_velocities[:, i] ** 2 / self.env.cfg.rewards.gait_vel_sigma)))
         return reward / 4
 

@@ -94,7 +94,7 @@ class Runner:
 
                 # Learning step
                 start = stop
-                self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'])
+                self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'],obs_dict['base_vel'])
 
             mean_value_loss, mean_surrogate_loss,mean_entropy_loss,\
                  mean_recons_loss, mean_vel_loss, mean_kld_loss = self.alg.update()
