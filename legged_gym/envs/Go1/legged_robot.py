@@ -42,6 +42,19 @@ class LeggedRobot(BaseTask):
         self._parse_cfg(self.cfg)
         self.num_commands = self.cfg.commands.num_commands 
         self.eval= False
+
+        #! Apply Force Task
+        if hasattr(self.cfg,'force_apply') and self.cfg.force_apply:
+            self.need_apply_force = True 
+            valid_apply_force_body = self.cfg.force_apply.body_index 
+            self.valid_apply_force_body = torch.tensor(valid_apply_force_body, dtype=torch.long, device=sim_device,requires_grad=False)
+            self.max_force_apply = self.cfg.force_apply.max_force
+            self.min_force_apply = self.cfg.force_apply.min_force 
+            self.max_z_force_apply = self.cfg.force_apply.max_z_force
+
+        else:
+            self.need_apply_force = False
+
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless, self.eval_cfg)
 
 
@@ -59,6 +72,7 @@ class LeggedRobot(BaseTask):
         self.record_eval_now = False
         self.collecting_evaluation = False
         self.num_still_evaluating = 0
+        
         
 
 
@@ -81,9 +95,9 @@ class LeggedRobot(BaseTask):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             #! Apply Force 
-            body_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
-            body_index[:] = 13
-            self.apply_force(force_norm = 50, body_index = body_index)
+            if self.need_apply_force:
+                self.apply_force()
+                
 
             self.gym.simulate(self.sim)
             if self.device == 'cpu':
@@ -146,6 +160,7 @@ class LeggedRobot(BaseTask):
         contact = self.contact_forces[:, self.feet_indices, 2] > 1.0 
         self.last_contacts[:] = self.contacts[:]
         self.contacts[:] = contact[:]
+        #! Re
 
 
         # if self.viewer and self.enable_viewer_sync and self.debug_viz:
@@ -162,7 +177,7 @@ class LeggedRobot(BaseTask):
         self.reset_buf |= self.time_out_buf
         if self.cfg.rewards.use_terminal_body_height:
             body_height = self._get_body_height()
-            # print("Body Height: ", body_height)
+            
             self.reset_buf |= body_height < self.cfg.rewards.terminal_body_height
 
 
@@ -192,6 +207,9 @@ class LeggedRobot(BaseTask):
                 self._call_train_eval(self._randomize_dof_props, env_ids)
                 self._call_train_eval(self._randomize_rigid_body_props, env_ids)
                 self._call_train_eval(self.refresh_actor_rigid_shape_props, env_ids)
+            
+            if self.need_apply_force:
+                self._reset_force_to_apply(env_ids)
 
         self._call_train_eval(self._reset_dofs, env_ids)
         self._call_train_eval(self._reset_root_states, env_ids)
@@ -491,6 +509,13 @@ class LeggedRobot(BaseTask):
                                                  (self.Kd_factors - kd_factor_shift) * kd_factor_scale), dim=-1)
             self.next_privileged_obs_buf = torch.cat((self.next_privileged_obs_buf,
                                                         (self.Kd_factors - kd_factor_shift) * kd_factor_scale), dim=-1)
+        
+        if self.cfg.env.priv_observe_force_apply:
+            force_info = torch.cat((self.body_index.unsqueeze(1), self.force_to_apply), dim=-1)
+            self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,
+                                                    force_info), dim=-1)
+            
+        
         if self.cfg.terrain.measure_heights:
             self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,
                                                  self.measured_heights * self.obs_scales.height_measurements), dim=-1)
@@ -1167,7 +1192,25 @@ class LeggedRobot(BaseTask):
     
     # ------------- Utils ------------- 
     # region Utils
-    def apply_force(self,force_norm, body_index):
+    def set_apply_force(self,body_index, force_norm, z_force_norm = 0):
+        self.body_index[:] = body_index
+        self.xy_force_norm[:] = force_norm
+        self.z_force_norm[:] = z_force_norm
+
+    def _reset_force_to_apply(self, env_ids):
+        self.force_to_apply[env_ids] = 0.0
+        self.xy_force_norm[env_ids] = torch_rand_float(lower = self.min_force_apply, 
+                                              upper = self.max_force_apply, 
+                                              size = (len(env_ids),),
+                                              device = self.device)
+        self.z_force_norm[env_ids] = torch_rand_float(lower = 0,
+                                                upper = self.max_z_force_apply,
+                                                size = (len(env_ids),),
+                                                device = self.device)
+        new_index = torch.randint(0, len(self.valid_apply_force_body), size = (len(env_ids),), device=self.device)
+        self.body_index[env_ids] = self.valid_apply_force_body[new_index]
+
+    def apply_force(self):
         """ Apply force to the body with the given index:
         the force direction is opposite to the agent base_lin_vel's x and y direction
         Args:
@@ -1175,16 +1218,19 @@ class LeggedRobot(BaseTask):
             body_index (num_env,): body index
         """
 
-        force = torch.zeros(self.num_envs,self.num_bodies,3, device=self.device,dtype=torch.float)
         x_vel = self.base_lin_vel[:,0]
         y_vel = self.base_ang_vel[:,1]
         vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
-        f_x,f_y = -force_norm * x_vel / (vel_norm + 1e-6), -force_norm * y_vel / (vel_norm + 1e-6)
-        force[torch.arange(self.num_envs), body_index , 0:2] = torch.stack((f_x,f_y),dim=1)
-        self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(force), 
+        f_x,f_y = -self.xy_force_norm * x_vel / (vel_norm + 1e-6), -self.xy_force_norm * y_vel / (vel_norm + 1e-6)
+        f_z = -self.z_force_norm
+        mask = self.body_index == -1 #! if body_index == -1, then do not apply force
+        f_x[mask], f_y[mask],f_z[mask] = 0.0, 0.0, 0.0
+        self.force_to_apply[torch.arange(self.num_envs), self.body_index.clamp(min = 0, max = self.num_bodies-1) , 0:3] = torch.stack((f_x,f_y,f_z),dim=1)
+        self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(self.force_to_apply), 
                                                     None,
                                                     gymapi.ENV_SPACE)
-        
+        # print("Debug:  ", self.body_index)
+        # print("Debug:  ", f_x, f_y,f_z)
     def _push_robots(self, env_ids, cfg):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
@@ -1492,6 +1538,13 @@ class LeggedRobot(BaseTask):
                                                    requires_grad=False)
         self.halftime_clock_inputs = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device,
                                                  requires_grad=False)
+        
+        #! add task inds 
+        self.body_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device,requires_grad=False)
+        self.xy_force_norm = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,requires_grad=False) 
+        self.z_force_norm = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,requires_grad=False) 
+        self.force_to_apply = torch.zeros(self.num_envs, self.num_bodies, 3, dtype=torch.float, device=self.device,requires_grad=False)
+
 
     def _prepare_reward_function(self):
         """ Prepares a list of reward functions, whcih will be called to compute the total reward.
@@ -1866,7 +1919,6 @@ class LeggedRobot(BaseTask):
         #! 这个 yaw 角是为了得到 base frame 下的 x,y,方向, 而不是 world frame 下的 x,y,方向
         points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, cfg.env.num_height_points),
                                 self.height_points[env_ids]) + (self.root_states[env_ids, :3]).unsqueeze(1)
-        # print(self.base_quat[env_ids].repeat(1, cfg.env.num_height_points).shape, self.height_points[env_ids].shape)
         points += self.terrain.cfg.border_size
         points = (points / self.terrain.cfg.horizontal_scale).long()
         px = points[:, :, 0].view(-1)
@@ -1942,8 +1994,6 @@ class LeggedRobot(BaseTask):
         heights = torch.max(heights, heights3).view(len(env_ids),-1) # shape = (num_envs, num_leg)
 
         delta_height =  foot_positions[env_ids,:,2]   - heights * self.terrain.cfg.vertical_scale
-        # print("Debug: ", foot_positions[env_ids,:,2])
-        # print("Debug: ", heights)
         delta_height -=  self.cfg.terrain.foot_offset
         return delta_height.view(len(env_ids),-1)
 

@@ -24,13 +24,14 @@ class EnvCfg(BasicCfg):
         observe_imu = False
 
         # ---------- Privileged Observations ----------
-        num_privileged_obs = 3
+        num_privileged_obs = 3 
         privileged_future_horizon = 0
         priv_observe_friction = True #! 1
         priv_observe_restitution = True #! 1 
         priv_observe_base_mass = True #! 1
         priv_observe_com_displacement = False #! 3
         priv_observe_motor_strength = False #! 12
+        priv_observe_force_apply = False #! 1 + 3, body_index, Force
         
     class terrain(BasicCfg.terrain):   
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
@@ -203,6 +204,13 @@ class EnvCfg(BasicCfg):
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+    
+    class force_apply:
+        apply_force = True 
+        body_index = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,-1] # 0-17, 18 bodies
+        max_force = 50.0
+        min_force = 10.0
+        max_z_force = 10.0 
 
 class RunnerCfg(BasicRunnerCfg):
 

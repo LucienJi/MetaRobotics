@@ -56,6 +56,7 @@ def play(arg, path = None):
     policy = ActorCritic(env.num_obs,env.num_privileged_obs,env.num_obs_history,env.num_actions,
                                         **policy_cfg).to(device)
     
+    env.set_apply_force(0, 50, z_force_norm = 0)
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
     play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [1.,0.0,0.0],
