@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 from utils.torch_utils import  get_activation, MultivariateGaussianDiagonalCovariance, init_orhtogonal
-from .adaptation_module import TCNHistoryEncoder, MLPExpertEncoder
+from .adaptation_module import TCNHistoryEncoder, MLPExpertEncoder,MLPHistoryEncoder
 
 class BaseActor(nn.Module):
     def __init__(self, 
@@ -97,12 +97,21 @@ class ActorCritic(nn.Module):
         )
 
         # Adaptation Module
-        self.adaptation_module = TCNHistoryEncoder(
+        self.adaptation_module = MLPHistoryEncoder(
             num_obs = num_obs,
-            num_history = num_history,
+            num_privileged_obs= num_privileged_obs,
+            num_obs_history=num_obs_history,
+            num_history=num_history,
             num_latent=num_latent,
             activation=activation,
+            adaptation_module_branch_hidden_dims=adaptation_module_branch_hidden_dims,
         )
+        # self.adaptation_module = TCNHistoryEncoder(
+        #     num_obs = num_obs,
+        #     num_history = num_history,
+        #     num_latent=num_latent,
+        #     activation=activation,
+        # )
 
         # Actor Module
         self.actor = BaseActor(

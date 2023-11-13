@@ -511,7 +511,7 @@ class LeggedRobot(BaseTask):
                                                         (self.Kd_factors - kd_factor_shift) * kd_factor_scale), dim=-1)
         
         if self.cfg.env.priv_observe_force_apply:
-            force_info = torch.cat((self.body_index.unsqueeze(1), self.force_to_apply), dim=-1)
+            force_info = torch.cat((self.body_index.unsqueeze(1), self.force_to_apply.sum(1)), dim=-1)
             self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,
                                                     force_info), dim=-1)
             
@@ -723,8 +723,14 @@ class LeggedRobot(BaseTask):
             sample_interval = int(self.cfg.commands.resampling_time / self.dt)
             env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
             self._resample_commands(env_ids)
-        # self._step_contact_targets()
-        self._step_custom_contact_targets()
+        # resample push force 
+
+        if not self.eval and self.need_apply_force:
+            sample_interval = int(self.cfg.force_apply.resampling_time/self.dt)
+            env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
+            self._reset_force_to_apply(env_ids)
+        
+        # self._step_custom_contact_targets()
 
         # measure terrain heights
         if self.cfg.terrain.measure_heights:
@@ -1201,12 +1207,12 @@ class LeggedRobot(BaseTask):
         self.force_to_apply[env_ids] = 0.0
         self.xy_force_norm[env_ids] = torch_rand_float(lower = self.min_force_apply, 
                                               upper = self.max_force_apply, 
-                                              size = (len(env_ids),),
-                                              device = self.device)
+                                              shape = (len(env_ids),1),
+                                              device = self.device).squeeze(1)
         self.z_force_norm[env_ids] = torch_rand_float(lower = 0,
                                                 upper = self.max_z_force_apply,
-                                                size = (len(env_ids),),
-                                                device = self.device)
+                                                shape = (len(env_ids),1),
+                                                device = self.device).squeeze(1)
         new_index = torch.randint(0, len(self.valid_apply_force_body), size = (len(env_ids),), device=self.device)
         self.body_index[env_ids] = self.valid_apply_force_body[new_index]
 
