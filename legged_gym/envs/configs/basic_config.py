@@ -292,8 +292,8 @@ class BasicCfg:
         foot_name = "foot"
         penalize_contacts_on =["thigh", "calf"]
         terminate_after_contacts_on = ["base"]
-        self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
-        flip_visual_attachments = False
+        self_collisions = 1  # 1 to disable, 0 to enable...bitwise filter
+        flip_visual_attachments = True
         fix_base_link = False
         disable_gravity = False
         # merge bodies connected by fixed joints. Specific fixed joints can be kept by adding " <... dont_collapse="true">
@@ -469,7 +469,7 @@ class BasicCfg:
     # viewer camera:
     class viewer:
         ref_env = 0
-        pos = [2.0, 0.0, 1.0]  # [m]
+        pos = [2.0, 0.0, 2.0]  # [m]
         lookat = [1., 1., 0.]  # [m]
 
     class sim:

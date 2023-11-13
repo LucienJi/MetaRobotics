@@ -24,9 +24,9 @@ class HistoryWrapper(gym.Wrapper):
         self.obs_history = torch.cat((self.obs_history[:, 1:], obs.unsqueeze(1)), dim=1)
         return {'obs': obs, 'privileged_obs': privileged_obs, 
                 'obs_history': self.obs_history,
-                'foot_height':self.env.get_foot_clearance(),
-                'foot_contact':self.env.get_foot_contact(),
-                'base_vel':self.env.get_base_vel()
+                # 'foot_height':self.env.get_foot_clearance(),
+                # 'foot_contact':self.env.get_foot_contact(),
+                # 'base_vel':self.env.get_base_vel()
                 }, rew, done, info
 
     def get_observations(self):
@@ -37,9 +37,9 @@ class HistoryWrapper(gym.Wrapper):
         return {'obs': obs, 
                 'privileged_obs': privileged_obs, 
                 'obs_history': self.obs_history,
-                'foot_height':self.env.get_foot_clearance(),
-                'foot_contact':self.env.get_foot_contact(),
-                'base_vel':self.env.get_base_vel() 
+                # 'foot_height':self.env.get_foot_clearance(),
+                # 'foot_contact':self.env.get_foot_contact(),
+                # 'base_vel':self.env.get_base_vel() 
                 }
 
     def reset_history(self, env_ids):  # it might be a problem that this isn't getting called!!
@@ -53,8 +53,8 @@ class HistoryWrapper(gym.Wrapper):
         return {"obs": obs, 
                 "privileged_obs": privileged_obs, 
                 "obs_history": self.obs_history,
-                'foot_height':self.env.get_foot_clearance(),
-                'foot_contact':self.env.get_foot_contact(),
-                'base_vel':self.env.get_base_vel()
+                # 'foot_height':self.env.get_foot_clearance(),
+                # 'foot_contact':self.env.get_foot_contact(),
+                # 'base_vel':self.env.get_base_vel()
                 }
 

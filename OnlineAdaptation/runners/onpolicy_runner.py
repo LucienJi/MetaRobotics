@@ -5,7 +5,8 @@ from collections import deque
 
 from utils.torch_utils import VecEnv,class_to_dict,dump_info,NumpyEncoder
 from Expert.configs.training_config import RunnerCfg
-from Expert.modules.ac import ActorCritic  
+# from Expert.modules.ac import NominalActorCritic as ActorCritic
+from Expert.modules.ac import SqashedActorCritic as ActorCritic
 from Expert.algorithms.ppo import PPO  
 import torch 
 import numpy as np 
@@ -24,6 +25,8 @@ class Runner:
                                       self.env.num_privileged_obs,
                                       self.env.num_obs_history,
                                       self.env.num_actions,
+                                      action_low=self.env.delta_dof_pos_low,
+                                      action_high=self.env.delta_dof_pos_high,
                                       **policy_cfg,
                                       ).to(self.device)
 

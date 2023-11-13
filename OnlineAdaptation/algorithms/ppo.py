@@ -1,4 +1,5 @@
-from Expert.modules.ac import ActorCritic
+from Expert.modules.ac import NominalActorCritic as ActorCritic
+# from Expert.modules.ac import SqashedActorCritic as ActorCritic
 import torch
 import torch.nn as nn
 import torch.optim as optim

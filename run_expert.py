@@ -8,7 +8,7 @@ from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
 
 from Expert.configs.training_config import EnvCfg,RunnerCfg
 from Expert.runners.onpolicy_runner import Runner
-from Expert.modules.ac import NominalActorCritic as ActorCritic
+from Expert.modules.ac import ActorCritic
 import torch 
 
 
@@ -20,11 +20,10 @@ def launch(args):
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
     sim_params = parse_sim_params(args, sim_params)
 
-    headless = True
     env = LeggedRobot(sim_params=sim_params,
                                     physics_engine=args.physics_engine,
                                     sim_device=args.sim_device,
-                                    headless=headless, 
+                                    headless=args.headless, 
                                     cfg = env_cfg,eval_cfg=None)
     env = HistoryWrapper(env) 
     log_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name)
@@ -38,7 +37,7 @@ def launch(args):
 def play(arg, path = None):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -60,12 +59,12 @@ def play(arg, path = None):
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
     play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [1.,0.0,0.0],
-                move_camera=False,record=False)
+                move_camera=False,record=True)
 
 if __name__ == '__main__':
     args = get_args()
     if args.play:
-        path = "logs/Expert/Oct11_18-13-48_Guide/model_5000.pt"
+        path = "logs/Debug/Nov13_09-09-03_Guide/model_5000.pt"
         play(args,path)
         exit()
     else:

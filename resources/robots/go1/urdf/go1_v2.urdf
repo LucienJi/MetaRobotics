@@ -44,8 +44,7 @@
   </joint>
   <link name="trunk">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/trunk.stl" scale="1 1 1"/>
       </geometry>
@@ -59,7 +58,8 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.011611 0.004437 0.000108"/>
-      <mass value="5.916"/> 
+      <!-- <mass value="4.8"/> -->
+      <mass value="6.49"/>
       <inertia ixx="0.016130741919" ixy="0.000593180607" ixz="7.324662e-06" iyy="0.036507810812" iyz="2.0969537e-05" izz="0.044693872053"/>
     </inertial>
   </link>
@@ -93,13 +93,12 @@
     <parent link="trunk"/>
     <child link="FR_hip"/>
     <axis xyz="1 0 0"/>
-    <dynamics damping="0.01" friction="0.2"/>
-    <limit effort="33.5" lower="-0.802851455917" upper="0.802851455917" velocity="50"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.863" upper="0.863" velocity="30.1"/>
   </joint>
   <link name="FR_hip">
     <visual>
-      <!-- <origin rpy="1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="3.14159265358 0 0" xyz="0 0 0"/>
+      <origin rpy="1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/hip.stl" scale="1 1 1"/>
       </geometry>
@@ -113,7 +112,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.00541 0.00074 6e-06"/>
-      <mass value="0.68"/>
+      <mass value="0.510299"/>
       <inertia ixx="0.00030528937" ixy="7.788013e-06" ixz="2.2016e-07" iyy="0.000590894859" iyz="1.7175e-08" izz="0.000396594572"/>
     </inertial>
   </link>
@@ -136,13 +135,12 @@
     <parent link="FR_hip"/>
     <child link="FR_thigh"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0.01" friction="0.2"/>
-    <limit effort="33.5" lower="-1.0471975512" upper="4.18879020479" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.686" upper="4.501" velocity="30.1"/>
   </joint>
   <link name="FR_thigh">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/thigh_mirror.stl" scale="1 1 1"/>
       </geometry>
@@ -156,7 +154,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.003468 0.018947 -0.032736"/>
-      <mass value="0.92"/>
+      <mass value="0.898919"/>
       <inertia ixx="0.005395867678" ixy="-1.02809e-07" ixz="0.000337529085" iyy="0.005142451046" iyz="5.816563e-06" izz="0.00102478732"/>
     </inertial>
   </link>
@@ -165,13 +163,12 @@
     <parent link="FR_thigh"/>
     <child link="FR_calf"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-2.69653369433" upper="-0.916297857297" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="35.55" lower="-2.818" upper="-0.888" velocity="20.06"/>
   </joint>
   <link name="FR_calf">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/calf.stl" scale="1 1 1"/>
       </geometry>
@@ -185,7 +182,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.006286 0.001307 -0.122269"/>
-      <mass value="0.135862"/>
+      <mass value="0.158015"/>
       <inertia ixx="0.003607648222" ixy="1.494971e-06" ixz="-0.000132778525" iyy="0.003626771492" iyz="-2.8638535e-05" izz="3.5148003e-05"/>
     </inertial>
   </link>
@@ -219,13 +216,12 @@
     <parent link="trunk"/>
     <child link="FL_hip"/>
     <axis xyz="1 0 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-0.802851455917" upper="0.802851455917" velocity="50"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.863" upper="0.863" velocity="30.1"/>
   </joint>
   <link name="FL_hip">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/hip.stl" scale="1 1 1"/>
       </geometry>
@@ -239,7 +235,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.00541 -0.00074 6e-06"/>
-      <mass value="0.68"/>
+      <mass value="0.510299"/>
       <inertia ixx="0.00030528937" ixy="-7.788013e-06" ixz="2.2016e-07" iyy="0.000590894859" iyz="-1.7175e-08" izz="0.000396594572"/>
     </inertial>
   </link>
@@ -262,13 +258,12 @@
     <parent link="FL_hip"/>
     <child link="FL_thigh"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0.01" friction="0.2"/>
-    <limit effort="33.5" lower="-1.0471975512" upper="4.18879020479" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.686" upper="4.501" velocity="30.1"/>
   </joint>
   <link name="FL_thigh">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/thigh.stl" scale="1 1 1"/>
       </geometry>
@@ -282,7 +277,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.003468 -0.018947 -0.032736"/>
-      <mass value="0.92"/>
+      <mass value="0.898919"/>
       <inertia ixx="0.005395867678" ixy="1.02809e-07" ixz="0.000337529085" iyy="0.005142451046" iyz="-5.816563e-06" izz="0.00102478732"/>
     </inertial>
   </link>
@@ -291,13 +286,12 @@
     <parent link="FL_thigh"/>
     <child link="FL_calf"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-2.69653369433" upper="-0.916297857297" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="35.55" lower="-2.818" upper="-0.888" velocity="20.06"/>
   </joint>
   <link name="FL_calf">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/calf.stl" scale="1 1 1"/>
       </geometry>
@@ -311,7 +305,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.006286 0.001307 -0.122269"/>
-      <mass value="0.135862"/>
+      <mass value="0.158015"/>
       <inertia ixx="0.003607648222" ixy="1.494971e-06" ixz="-0.000132778525" iyy="0.003626771492" iyz="-2.8638535e-05" izz="3.5148003e-05"/>
     </inertial>
   </link>
@@ -345,13 +339,12 @@
     <parent link="trunk"/>
     <child link="RR_hip"/>
     <axis xyz="1 0 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-0.802851455917" upper="0.802851455917" velocity="50"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.863" upper="0.863" velocity="30.1"/>
   </joint>
   <link name="RR_hip">
     <visual>
-      <!-- <origin rpy="1.57079632679 3.14159265359 0" xyz="0 0 0"/> -->
-      <origin rpy="3.14159265358 0 0" xyz="0 0 0"/>
+      <origin rpy="1.57079632679 3.14159265359 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/hip.stl" scale="1 1 1"/>
       </geometry>
@@ -365,7 +358,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.00541 0.00074 6e-06"/>
-      <mass value="0.68"/>
+      <mass value="0.510299"/>
       <inertia ixx="0.00030528937" ixy="-7.788013e-06" ixz="-2.2016e-07" iyy="0.000590894859" iyz="1.7175e-08" izz="0.000396594572"/>
     </inertial>
   </link>
@@ -388,13 +381,12 @@
     <parent link="RR_hip"/>
     <child link="RR_thigh"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-1.0471975512" upper="4.18879020479" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.686" upper="4.501" velocity="30.1"/>
   </joint>
   <link name="RR_thigh">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/thigh_mirror.stl" scale="1 1 1"/>
       </geometry>
@@ -408,7 +400,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.003468 0.018947 -0.032736"/>
-      <mass value="0.92"/>
+      <mass value="0.898919"/>
       <inertia ixx="0.005395867678" ixy="-1.02809e-07" ixz="0.000337529085" iyy="0.005142451046" iyz="5.816563e-06" izz="0.00102478732"/>
     </inertial>
   </link>
@@ -417,13 +409,12 @@
     <parent link="RR_thigh"/>
     <child link="RR_calf"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-2.69653369433" upper="-0.916297857297" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="35.55" lower="-2.818" upper="-0.888" velocity="20.06"/>
   </joint>
   <link name="RR_calf">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/calf.stl" scale="1 1 1"/>
       </geometry>
@@ -437,7 +428,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.006286 0.001307 -0.122269"/>
-      <mass value="0.135862"/>
+      <mass value="0.158015"/>
       <inertia ixx="0.003607648222" ixy="1.494971e-06" ixz="-0.000132778525" iyy="0.003626771492" iyz="-2.8638535e-05" izz="3.5148003e-05"/>
     </inertial>
   </link>
@@ -471,13 +462,12 @@
     <parent link="trunk"/>
     <child link="RL_hip"/>
     <axis xyz="1 0 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-0.802851455917" upper="0.802851455917" velocity="50"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.863" upper="0.863" velocity="30.1"/>
   </joint>
   <link name="RL_hip">
     <visual>
-      <!-- <origin rpy="-1.57079632679 3.14159265359 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 3.14159265359 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/hip.stl" scale="1 1 1"/>
       </geometry>
@@ -491,7 +481,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.00541 -0.00074 6e-06"/>
-      <mass value="0.68"/>
+      <mass value="0.510299"/>
       <inertia ixx="0.00030528937" ixy="7.788013e-06" ixz="-2.2016e-07" iyy="0.000590894859" iyz="-1.7175e-08" izz="0.000396594572"/>
     </inertial>
   </link>
@@ -514,13 +504,12 @@
     <parent link="RL_hip"/>
     <child link="RL_thigh"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-1.0471975512" upper="4.18879020479" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="23.7" lower="-0.686" upper="4.501" velocity="30.1"/>
   </joint>
   <link name="RL_thigh">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/thigh.stl" scale="1 1 1"/>
       </geometry>
@@ -534,7 +523,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.003468 -0.018947 -0.032736"/>
-      <mass value="0.92"/>
+      <mass value="0.898919"/>
       <inertia ixx="0.005395867678" ixy="1.02809e-07" ixz="0.000337529085" iyy="0.005142451046" iyz="-5.816563e-06" izz="0.00102478732"/>
     </inertial>
   </link>
@@ -543,13 +532,12 @@
     <parent link="RL_thigh"/>
     <child link="RL_calf"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0" friction="0"/>
-    <limit effort="33.5" lower="-2.69653369433" upper="-0.916297857297" velocity="28"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="35.55" lower="-2.818" upper="-0.888" velocity="20.06"/>
   </joint>
   <link name="RL_calf">
     <visual>
-      <!-- <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/> -->
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="../meshes/calf.stl" scale="1 1 1"/>
       </geometry>
@@ -563,7 +551,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.006286 0.001307 -0.122269"/>
-      <mass value="0.135862"/>
+      <mass value="0.158015"/>
       <inertia ixx="0.003607648222" ixy="1.494971e-06" ixz="-0.000132778525" iyy="0.003626771492" iyz="-2.8638535e-05" izz="3.5148003e-05"/>
     </inertial>
   </link>

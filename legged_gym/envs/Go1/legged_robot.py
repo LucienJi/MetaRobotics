@@ -80,6 +80,11 @@ class LeggedRobot(BaseTask):
         for _ in range(self.cfg.control.decimation):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
+            #! Apply Force 
+            body_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+            body_index[:] = 13
+            self.apply_force(force_norm = 50, body_index = body_index)
+
             self.gym.simulate(self.sim)
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
@@ -1162,6 +1167,24 @@ class LeggedRobot(BaseTask):
     
     # ------------- Utils ------------- 
     # region Utils
+    def apply_force(self,force_norm, body_index):
+        """ Apply force to the body with the given index:
+        the force direction is opposite to the agent base_lin_vel's x and y direction
+        Args:
+            force_norm (float): force norm
+            body_index (num_env,): body index
+        """
+
+        force = torch.zeros(self.num_envs,self.num_bodies,3, device=self.device,dtype=torch.float)
+        x_vel = self.base_lin_vel[:,0]
+        y_vel = self.base_ang_vel[:,1]
+        vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
+        f_x,f_y = -force_norm * x_vel / (vel_norm + 1e-6), -force_norm * y_vel / (vel_norm + 1e-6)
+        force[torch.arange(self.num_envs), body_index , 0:2] = torch.stack((f_x,f_y),dim=1)
+        self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(force), 
+                                                    None,
+                                                    gymapi.ENV_SPACE)
+        
     def _push_robots(self, env_ids, cfg):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
@@ -1431,11 +1454,13 @@ class LeggedRobot(BaseTask):
     def _init_custom_buffers__(self):
         # domain randomization properties
         self.env_command_bins = np.zeros(self.num_envs, dtype=np.int32)
+        
         self.friction_coeffs = self.default_friction * torch.ones(self.num_envs, 4, dtype=torch.float, device=self.device,
                                                                   requires_grad=False)
         self.restitutions = self.default_restitution * torch.ones(self.num_envs, 4, dtype=torch.float, device=self.device,
                                                                   requires_grad=False)
         self.payloads = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
         self.com_displacements = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device,
                                              requires_grad=False)
         self.motor_strengths = torch.ones(self.num_envs, self.num_dof, dtype=torch.float, device=self.device,
@@ -1605,6 +1630,7 @@ class LeggedRobot(BaseTask):
         # print("Checkt Body Names: ", body_names)
         self.dof_names = self.gym.get_asset_dof_names(self.robot_asset)
         self.num_bodies = len(body_names)
+        print("Check Body Names: ", body_names)
         self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
         penalized_contact_names = []
@@ -1936,11 +1962,9 @@ class LeggedRobot(BaseTask):
         return root_position[:,2] - heights * self.terrain.cfg.vertical_scale
 
 
-        
-
     # endregion
 
-    
+    #region
     # ----------- Eval Utils ------------ # 
     def get_eval_data(self):
         """
@@ -2067,6 +2091,7 @@ class LeggedRobot(BaseTask):
             list_dof_states.append(dof_states)
             list_root_states.append(root_states)
         return list_dof_states, list_root_states
+    #endregion
 
 
 

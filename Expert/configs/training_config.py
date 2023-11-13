@@ -5,7 +5,7 @@ import numpy as np
 class EnvCfg(BasicCfg):
     class env(BasicCfg.env):
         num_envs = 4096
-        num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 
+        num_observations = 52 # 12(joint_pos) + 12(joint_vel) + 12 + 4 + 3 + 3 + 3 + 3 
         num_actions = 12
         num_observation_history = 5
         episode_length_s = 20  # episode length in seconds
@@ -59,11 +59,11 @@ class EnvCfg(BasicCfg):
         
         terrain_kwargs = {
             "plane_terrain":{
-                "weight": 10.0,
+                "weight": 1.0,
                 "height" : 0.0
             },
             'random_uniform_terrain': {
-                "weight": 1.0,
+                "weight": 10.0,
                 "min_height" : -0.03,
                 "max_height" : 0.03,
                 "step" : 0.005,
@@ -128,26 +128,26 @@ class EnvCfg(BasicCfg):
                 'name':'vel_x',
                 'init_low':-0.5,
                 'init_high':0.5,
-                'limit_low':-2.0,
-                'limit_high':2.0,
+                'limit_low':-1.0,
+                'limit_high':1.0,
                 'local_range':0.5,
-                'num_bins':21,
+                'num_bins':11,
             },
             1:{
                 'name':'vel_y',
                 'init_low':-0.3,
                 'init_high':0.3,
-                'limit_low':-0.6,
-                'limit_high':0.6,
+                'limit_low':-0.5,
+                'limit_high':0.5,
                 'local_range':0.5,
                 'num_bins':11,
             },
             2:{
                 'name':'vel_yaw',
-                'init_low':-0.5,
-                'init_high':0.5,
-                'limit_low':-1.0,
-                'limit_high':1.0,
+                'init_low':-0.2,
+                'init_high':0.2,
+                'limit_low':-0.5,
+                'limit_high':0.5,
                 'local_range':0.5,
                 'num_bins':11,
             }
@@ -156,42 +156,34 @@ class EnvCfg(BasicCfg):
         
         num_commands = 3
         lin_vel_x = [-1.0, 1.0]  # min max [m/s]
-        lin_vel_y =  [-0.6, 0.6]  # min max [m/s]
-        ang_vel_yaw = [-1, 1]  # min max [rad/s]
+        lin_vel_y =  [-0.5, 0.5]  # min max [m/s]
+        ang_vel_yaw = [-0.5, 0.5]  # min max [rad/s]
 
-        limit_vel_x = [-1.5, 1.5]
-        limit_vel_y = [-0.6, 0.6]
-        limit_vel_yaw = [-1.0, 1.0]
     class rewards(BasicCfg.rewards):
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        only_positive_rewards_ji22_style = True
+        only_positive_rewards_ji22_style = False
 
         soft_dof_vel_limit = 1.0
         soft_torque_limit = 0.9
         soft_dof_pos_limit = 1.0
-        base_height_target = 0.34
+        base_height_target = 0.25
         max_contact_force = 100. 
 
         sigma_rew_neg = 0.02
 
     class reward_scales:
+        torques = -0.0002  # -0.0002
+        dof_pos_limits = -10.0
         termination = -0.0
         tracking_lin_vel = 1.0
         tracking_ang_vel = 0.5
-        lin_vel_z = -0.2
-        ang_vel_xy = -0.001
-        dof_vel = -1e-4
-        dof_acc = -1e-7
-        collision = -1.
-        torques = -0.0001
-        feet_slip = -0.04
-
-        action_rate = -0.001
-        action_smoothness_1 = -0.01
-        action_smoothness_2 = -0.01
-        orientation = -0.1
-        feet_clearance = -30.0
-        heuristic = -10.
+        lin_vel_z = -2.0 # -2.0
+        ang_vel_xy = -0.05 # -0.05
+        orientation = -0.
+        dof_vel = -0.
+        dof_acc = -5e-7 # -2.5e-7
+        collision = -1. # -1.0
+        action_rate = -0.01# -0.01 # -0.01 #TODO: 暂时删除action震荡的penalty
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
@@ -206,7 +198,7 @@ class EnvCfg(BasicCfg):
         com_displacement_range = [-0.15, 0.15]
         randomize_motor_strength = False
         motor_strength_range = [0.9, 1.1]
-        randomize_lag_timesteps = True
+        randomize_lag_timesteps = False
         lag_timesteps = 6
         push_robots = True
         push_interval_s = 15
@@ -222,10 +214,10 @@ class RunnerCfg(BasicRunnerCfg):
         entropy_coef = 0.01
         num_learning_epochs = 5
         num_mini_batches = 4  # mini batch size = num_envs*nsteps / nminibatches
-        learning_rate = 1.e-3# 5.e-4
+        learning_rate = 5.e-4# 5.e-4
         adaptation_module_learning_rate = 1.e-3
         num_adaptation_module_substeps = 1
-        schedule = 'fixed'  # could be adaptive, fixed
+        schedule = 'adaptive'  # could be adaptive, fixed
         gamma = 0.99
         lam = 0.95
         desired_kl = 0.01
@@ -236,13 +228,13 @@ class RunnerCfg(BasicRunnerCfg):
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         adaptation_module_branch_hidden_dims = [256, 128]
-        activation = 'elu'
+        activation = 'lrelu'
     class runner:
         run_name = 'Guide'
-        experiment_name = 'Expert'
+        experiment_name = 'Debug'
         
         num_steps_per_env = 24 # per iteration
-        max_iterations = 1500 # number of policy updates
+        max_iterations = 5000 # number of policy updates
         # logging
         save_interval = 1000 # check for potential saves every this many iterations
         # load and resume
