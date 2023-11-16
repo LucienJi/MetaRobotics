@@ -4,9 +4,9 @@ import statistics
 from collections import deque 
 
 from utils.torch_utils import VecEnv,class_to_dict,dump_info,NumpyEncoder
-from OnlineAdaptation.configs.training_config import RunnerCfg
-from OnlineAdaptation.modules.ac import GraphActorCritic ,ActorCritic
-from OnlineAdaptation.algorithms.ppo import PPO  
+from OnlineAdaptation.configs.vq_training_config import RunnerCfg
+from OnlineAdaptation.modules.ac import VQActorCritic as ActorCritic
+from OnlineAdaptation.algorithms.vq_ppo import PPO  
 import torch 
 import numpy as np 
 
@@ -20,18 +20,8 @@ class Runner:
         self.ppo_cfg = cfg.algorithm
 
         policy_cfg = class_to_dict(self.policy_cfg)
-        if self.ppo_cfg.use_graph:
-            actor_critic = GraphActorCritic(
-                                      num_obs=self.env.num_obs,
-                                        num_privileged_obs=self.env.num_privileged_obs,
-                                        num_obs_history=self.env.num_obs_history,
-                                        num_history=self.env.num_history,
-                                        num_actions=self.env.num_actions,
-                                        use_forward=self.ppo_cfg.use_forward,
-                                      **policy_cfg,
-                                      ).to(self.device)
-        else:
-            actor_critic = ActorCritic(num_obs=self.env.num_obs,
+        
+        actor_critic = ActorCritic(num_obs=self.env.num_obs,
                                         num_privileged_obs=self.env.num_privileged_obs,
                                         num_obs_history=self.env.num_obs_history,
                                         num_history=self.env.num_history,
@@ -108,7 +98,7 @@ class Runner:
                 start = stop
                 self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'],obs_dict['obs_history'])
 
-            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss,mean_cmt_loss = self.alg.update()
             stop = time.time()
             learn_time = stop - start
             if it % self.save_interval == 0:
@@ -178,6 +168,7 @@ class Runner:
 
         self.writer.add_scalar('Loss/value_function', locs['mean_value_loss'], locs['it'])
         self.writer.add_scalar('Loss/forward prediction', locs['mean_forward_loss'], locs['it'])
+        self.writer.add_scalar('Loss/CMT Loss', locs['mean_cmt_loss'], locs['it'])
         self.writer.add_scalar('Loss/surrogate', locs['mean_surrogate_loss'], locs['it'])
         self.writer.add_scalar('Loss/entropy', locs['mean_entropy_loss'], locs['it'])
         self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, locs['it'])
@@ -206,6 +197,7 @@ class Runner:
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
+                          f"""{'CMT loss:':>{pad}} {locs['mean_cmt_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
@@ -220,6 +212,7 @@ class Runner:
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
+                          f"""{'CMT loss:':>{pad}} {locs['mean_cmt_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n""")

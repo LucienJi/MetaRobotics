@@ -235,7 +235,7 @@ class RunnerCfg(BasicRunnerCfg):
 
         #! use forward model to perform the unsupervised learning
         num_adaptation_module_substeps = 4
-        use_graph = True
+        use_graph = False
         use_forward = False 
         stop_gradient = False
     class policy:
@@ -247,7 +247,7 @@ class RunnerCfg(BasicRunnerCfg):
         activation = 'lrelu'
     class runner:
         run_name = 'NoForward'
-        experiment_name = 'Graph'
+        experiment_name = 'VQ'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 5000 # number of policy updates

@@ -1235,8 +1235,6 @@ class LeggedRobot(BaseTask):
         self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(self.force_to_apply), 
                                                     None,
                                                     gymapi.ENV_SPACE)
-        # print("Debug:  ", self.body_index)
-        # print("Debug:  ", f_x, f_y,f_z)
     def _push_robots(self, env_ids, cfg):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """

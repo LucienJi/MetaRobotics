@@ -8,6 +8,7 @@ class HistoryWrapper(gym.Wrapper):
         self.env = env
         self.obs_history_length = self.env.cfg.env.num_observation_history
         
+        self.num_history = self.obs_history_length
         self.num_obs_history = self.obs_history_length * self.env.num_obs
 
         #! 这里选择 stacked 的 history 而不是 concat 的 history

@@ -5,10 +5,13 @@ from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
 from visualization.play_helper import play_policy
 from legged_gym.utils.helpers import class_to_dict,update_class_from_dict,parse_sim_params,get_load_path,update_cfg_from_args,get_args
 from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
-from Lips.modules.ac import LipsActorCritic as ActorCritic
-from Lips.configs.training_config import EnvCfg,RunnerCfg
-from Lips.runners.onpolicy_runner import Runner
+
+from OnlineAdaptation.configs.vq_training_config import EnvCfg,RunnerCfg
+from OnlineAdaptation.runners.vq_onpolicy_runner import Runner
+from OnlineAdaptation.modules.ac import VQActorCritic
 import torch 
+
+
 def launch(args):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
@@ -17,11 +20,10 @@ def launch(args):
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
     sim_params = parse_sim_params(args, sim_params)
 
-    headless = True
     env = LeggedRobot(sim_params=sim_params,
                                     physics_engine=args.physics_engine,
                                     sim_device=args.sim_device,
-                                    headless=headless, 
+                                    headless=args.headless, 
                                     cfg = env_cfg,eval_cfg=None)
     env = HistoryWrapper(env) 
     log_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name)
@@ -35,7 +37,7 @@ def launch(args):
 def play(arg, path = None):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -51,27 +53,26 @@ def play(arg, path = None):
                                     cfg = env_cfg,eval_cfg=None)
     env = HistoryWrapper(env) 
     policy_cfg  = class_to_dict(train_cfg.policy)
-    policy = ActorCritic(env.num_obs,
-                         env.num_privileged_obs,
-                         env.num_obs_history,env.num_actions,
-                         inference_stage=train_cfg.runner.stage,
+    policy = VQActorCritic(env.num_obs,env.num_privileged_obs,env.num_obs_history,
+                              env.num_history,
+                              env.num_actions,
                                         **policy_cfg).to(device)
     
+    env.set_apply_force(0, 50, z_force_norm = 0)
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
     play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [1.,0.0,0.0],
-                move_camera=False,record=False)
-    
+                move_camera=False,record=True)
+
 if __name__ == '__main__':
     args = get_args()
     if args.play:
-        path = "logs/Lips/Oct12_18-21-16_noraml/model_5000.pt"
+        path = "logs/Debug/Nov13_09-09-03_Guide/model_5000.pt"
         play(args,path)
         exit()
     else:
         env, runner , env_cfg ,train_cfg = launch(args)
-        runner.load("logs/Lips/Oct12_18-21-16_noraml/model_5000.pt")
-        runner.learn(num_learning_iterations=5000)
+        runner.learn(num_learning_iterations=10000)
 
     
     

@@ -1,6 +1,8 @@
 import torch.nn as nn
 import torch
 from utils.torch_utils import  get_activation,check_cnnoutput
+from torch_geometric.nn import ResGatedGraphConv, GatedGraphConv
+
 """
 obs_buf: 
     base_vel, 3 : 0:3
@@ -43,21 +45,70 @@ edge_index = [
     [4,8],[8,12],
 ]
 
+def mlp(input_dim, out_dim, hidden_sizes, activations):
+    layers = []
+    prev_h = input_dim
+    for h in hidden_sizes:
+        layers.append(nn.Linear(prev_h, h))
+        layers.append(activations)
+        prev_h = h
+    layers.append(nn.Linear(prev_h, out_dim))
+    return nn.Sequential(*layers)
 class GraphEncoder(nn.Module):
     def __init__(self,
                  num_obs,
                  num_history,
                  num_latent,
-                 activation = 'elu',):
+                 activation = 'relu',):
         super(GraphEncoder, self).__init__()
         self.num_obs = num_obs
         self.num_latent = num_latent
         activation_fn = get_activation(activation)
         # graph info
-        self.nodes = nn.ParameterDict({k:nn.Parameter(torch.as_tensor(v,dtype=torch.long),requires_grad=False) for k,v in node_info.items()})
-        self.n_node = len(self.nodes.values())
-        output_size = num_latent
+        node_base = torch.tensor(list(body_index.values()),dtype=torch.long).squeeze()
+        node_hip = torch.stack([torch.tensor(list(hip_index.values()),dtype=torch.long)],dim=0).squeeze()
+        node_thigh = torch.stack([torch.tensor(list(thigh_index.values()),dtype=torch.long)],dim=0).squeeze()
+        node_calf = torch.stack([torch.tensor(list(calf_index.values()),dtype=torch.long)],dim=0).squeeze()
+
+        self.node_base = nn.Parameter(node_base, requires_grad=False)
+        self.node_hip = nn.Parameter(node_hip, requires_grad=False)
+        self.node_thigh = nn.Parameter(node_thigh, requires_grad=False)
+        self.node_calf = nn.Parameter(node_calf, requires_grad=False) 
+        self.edge = nn.Parameter(torch.as_tensor(edge_index, dtype=torch.long).contiguous().t(),requires_grad=False)
+
+        # build feature extractor for base, hip, thigh and calf
+        base_input_size = num_history * len(list(body_index.values())[0])
+        hip_input_size = num_history * len(list(hip_index.values())[0])
+        thigh_input_size = num_history * len(list(thigh_index.values())[0])
+        calf_input_size = num_history * len(list(calf_index.values())[0])
+        self.base_net = mlp(base_input_size, 2 * num_latent, [256], activation_fn)
+        self.hip_net = mlp(hip_input_size, 2 * num_latent, [256], activation_fn)
+        self.thigh_net = mlp(thigh_input_size, 2 * num_latent, [256], activation_fn)
+        self.calf_net = mlp(calf_input_size, 2* num_latent, [256], activation_fn)
+
+        # build graph net 
+        self.gn = ResGatedGraphConv(in_channels= 2* num_latent,out_channels=2* num_latent)
+        self.gn2 = ResGatedGraphConv(in_channels= 2* num_latent,out_channels= num_latent)
+        self.act = activation_fn
     
+    def _history2node(self,obs_history):
+        # obs_history.shape = (bz, n_histroy, n_obs)
+        base = obs_history[:,:,self.node_base].unsqueeze(1) # (bz, n_history, n_base)
+        hip = obs_history[:,:,self.node_hip].permute(0,2,1,3) # (bz, n_history, 4, 4)
+        thigh = obs_history[:,:,self.node_thigh].permute(0,2,1,3)
+        calf = obs_history[:,:,self.node_calf].permute(0,2,1,3) 
+        base = self.base_net(base.flatten(-2,-1))
+        hip = self.hip_net(hip.flatten(-2,-1))
+        thigh = self.thigh_net(thigh.flatten(-2,-1))
+        calf = self.calf_net(calf.flatten(-2,-1))
+        return torch.cat([base,hip,thigh,calf],dim=1) # (bz, n_node,num_latent)
+    
+    def forward(self,obs_history):
+        nodes = self._history2node(obs_history)
+        nodes = self.gn(nodes,self.edge)
+        nodes = self.act(nodes)
+        nodes = self.gn2(nodes,self.edge)
+        return nodes
         
 
 

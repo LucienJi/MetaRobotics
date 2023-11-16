@@ -3,96 +3,155 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 from utils.torch_utils import  get_activation,init_orhtogonal,SquashedGaussian
+from .adaptation_module import body_index,hip_index,thigh_index,calf_index,edge_index,GraphEncoder,mlp , MLPHistoryEncoder
+from torch_geometric.nn import ResGatedGraphConv, GatedGraphConv
+from .forward_model import GraphForward,MLPForward
+from .vq_torch.vq_quantize import VectorQuantize
+
+
+class VQActorCritic(nn.Module):
+    def __init__(self, 
+                 num_obs,
+                 num_privileged_obs,
+                 num_obs_history,
+                 num_history,
+                 num_latent,
+                 num_actions,
+                 activation = 'elu',
+                 actor_hidden_dims = [512, 256, 128],
+                 critic_hidden_dims = [512, 256, 128],
+                 adaptation_module_branch_hidden_dims = [256, 128],
+                 init_noise_std = 1.0,
+                 use_forward = False):
+        super().__init__()
+
+        # Actor 
+        self.use_forward = use_forward
+        codebook_size = 128 # num code in 1 head 
+        heads,codebook_dim = 8 , 32 
+        dim = heads * codebook_dim
+        input_size = num_obs_history
+        act_fn = get_activation(activation)
+        self.adaptation_module = nn.Sequential(
+            nn.Linear(input_size, input_size * 2),
+            act_fn,
+            nn.Linear(input_size * 2, dim),
+        )
+        self.vq = VectorQuantize(dim = dim , codebook_size=codebook_size,codebook_dim=codebook_dim,
+                           heads=heads, separate_codebook_per_head=True,
+                           orthogonal_reg_weight=0.0,
+                           )
+        
+        actor_input_size = num_obs + dim
+        self.actor = mlp(
+            input_dim=actor_input_size,
+            out_dim=num_actions,hidden_sizes=actor_hidden_dims,activations=get_activation(activation)
+        )
+
+        # Critic 
+        critic_input_size = num_obs + num_privileged_obs
+        self.critic = mlp(
+            input_dim=critic_input_size,
+            out_dim=1, hidden_sizes=critic_hidden_dims,activations=get_activation(activation)
+        )
+        # Action noise
+        self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
+        self.distribution = None
+        # disable args validation for speedup
+        Normal.set_default_validate_args = False
+        self.apply(init_orhtogonal)
+        
+    @property
+    def action_mean(self):
+        return self.distribution.mean
+
+    @property
+    def action_std(self):
+        return self.distribution.stddev
+
+    @property
+    def entropy(self):
+        return self.distribution.entropy().sum(dim=-1)
+    def update_distribution(self, obs, observation_history):
+        observation_history = observation_history.reshape(observation_history.shape[0],-1)
+        latent= self.adaptation_module(observation_history)
+        latent,indices, loss  = self.vq(latent)
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
+
+    def act(self,obs, observation_history, **kwargs):
+        self.update_distribution(obs,observation_history)
+        return self.distribution.sample()
+
+    def get_actions_log_prob(self, actions):
+        return self.distribution.log_prob(actions).sum(dim=-1)
+
+    def act_inference(self, ob, policy_info={}):
+        self.update_distribution(ob["obs"], ob["obs_history"])
+        return self.distribution.mean
+
+    def evaluate(self, obs, obs_history, privileged_observations, **kwargs):
+        value = self.critic(torch.cat([obs, privileged_observations], dim=-1))
+        return value
+
+    
+    
+    # region
+    #--------------------- Training ---------------------#
+    def get_latent_and_loss(self, observation_history):
+        observation_history = observation_history.reshape(observation_history.shape[0],-1)
+        latent = self.adaptation_module(observation_history)
+        latent,indices, loss = self.vq(latent)
+        return latent, loss 
+    
+    def _update_with_latent(self,obs, latent):
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
+    # endregion
+
+
 
 class ActorCritic(nn.Module):
     def __init__(self, 
                  num_obs,
                  num_privileged_obs,
                  num_obs_history,
+                 num_history,
+                 num_latent,
                  num_actions,
                  activation = 'elu',
                  actor_hidden_dims = [512, 256, 128],
                  critic_hidden_dims = [512, 256, 128],
                  adaptation_module_branch_hidden_dims = [256, 128],
-                 init_noise_std = 1.0):
+                 init_noise_std = 1.0,
+                 use_forward = True):
         super().__init__()
-        self.num_obs_history = num_obs_history
-        self.num_privileged_obs = num_privileged_obs
-        activation = get_activation(activation)
+        self.use_forward = use_forward
         # Adaptation module
-        adaptation_module_layers = []
-        adaptation_module_layers.append(nn.Linear(self.num_obs_history, adaptation_module_branch_hidden_dims[0]))
-        adaptation_module_layers.append(activation)
-        for l in range(len(adaptation_module_branch_hidden_dims)):
-            if l == len(adaptation_module_branch_hidden_dims) - 1:
-                adaptation_module_layers.append(
-                    nn.Linear(adaptation_module_branch_hidden_dims[l], self.num_privileged_obs))
-            else:
-                adaptation_module_layers.append(
-                    nn.Linear(adaptation_module_branch_hidden_dims[l],
-                              adaptation_module_branch_hidden_dims[l + 1]))
-                adaptation_module_layers.append(activation)
-        self.adaptation_module = nn.Sequential(*adaptation_module_layers)
+        self.adaptation_module = MLPHistoryEncoder(num_obs,
+                                                   num_privileged_obs,
+                                                   num_obs_history,
+                                                   num_history,
+                                                   num_latent,
+                                                   activation)
+        
+        # Actor 
+        mlp_input_size = num_obs + num_latent
+        self.actor = mlp(mlp_input_size, num_actions, actor_hidden_dims, get_activation(activation))
+        
+        # Critic
+        mlp_critic_input = num_privileged_obs + num_obs 
+        self.critic = mlp(mlp_critic_input, 1, critic_hidden_dims, get_activation(activation))
 
-
-
-        # Policy
-        mlp_input_dim_a = self.num_privileged_obs + self.num_obs_history
-        self.actor_obs_feature = actor_hidden_dims[0]
-
-        actor_layers = []
-        self.actor_encoder = nn.Sequential(
-            nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]),
-            activation
-        )
-        actor_layers.append(self.actor_encoder)
-        actor_blocks = []
-        for l in range(len(actor_hidden_dims)):
-            if l == len(actor_hidden_dims) - 1:
-                self.actor_action_feature = actor_hidden_dims[l]
-                self.actor_output_layer = nn.Linear(actor_hidden_dims[l], num_actions)
-            else:
-                actor_blocks.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
-                actor_blocks.append(activation)
-        self.actor_blocks = nn.Sequential(*actor_blocks)
-        actor_layers.append(self.actor_blocks)
-        actor_layers.append(self.actor_output_layer)
-        self.actor_body = nn.Sequential(*actor_layers)
-
-
-        # Value function
-        mlp_input_dim_c = self.num_privileged_obs + self.num_obs_history
-        critic_layers = []
-        self.critic_encoder = nn.Sequential(
-            nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]),
-            activation
-        )
-        self.critic_obs_feature = critic_hidden_dims[0]
-        critic_layers.append(self.critic_encoder)
-        critic_blocks = []
-        for l in range(len(critic_hidden_dims)):
-            if l == len(critic_hidden_dims) - 1:
-                self.critic_value_feature = critic_hidden_dims[l]
-                self.critic_output_layer = nn.Linear(critic_hidden_dims[l], 1)
-            else:
-                critic_blocks.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
-                critic_blocks.append(activation)
-        self.critic = nn.Sequential(*critic_layers)
-        self.critic_blocks = nn.Sequential(*critic_blocks)
-        critic_layers.append(self.critic_blocks)
-        critic_layers.append(self.critic_output_layer)
-        self.critic_body = nn.Sequential(*critic_layers)
-        Normal.set_default_validate_args = False
-
-        self.adaptation_module.apply(init_orhtogonal)
-        self.actor_body.apply(init_orhtogonal)
-        self.critic.apply(init_orhtogonal)
-
-         # Action noise
+        # Forward 
+        if self.use_forward:
+            self.forward_model = MLPForward(num_obs,num_latent,num_actions,activation)
+        # Action noise
         self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
         self.distribution = None
         # disable args validation for speedup
         Normal.set_default_validate_args = False
+        self.apply(init_orhtogonal)
         
     @property
     def action_mean(self):
@@ -107,107 +166,158 @@ class ActorCritic(nn.Module):
         return self.distribution.entropy().sum(dim=-1)
 
     
-    def update_distribution(self, observation_history):
-        bz = observation_history.shape[0]
-        latent = self.adaptation_module(observation_history.reshape(bz, -1))
-        mean = self.actor_body(torch.cat((observation_history.reshape(bz, -1), latent), dim=-1))
+    def update_distribution(self, obs, observation_history):
+        node_latent = self.adaptation_module(observation_history)
+        mean = self.actor(obs, node_latent)
         self.distribution = Normal(mean, mean * 0. + self.std)
 
-    def act(self, observation_history, **kwargs):
-        self.update_distribution(observation_history)
+    def act(self,obs, observation_history, **kwargs):
+        self.update_distribution(obs,observation_history)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
-    def act_expert(self, ob, policy_info={}):
-        return self.act_teacher(ob["obs_history"], ob["privileged_obs"])
-
     def act_inference(self, ob, policy_info={}):
-        return self.act_student(ob["obs_history"], policy_info=policy_info)
+        self.update_distribution(ob["obs"], ob["obs_history"])
+        return self.distribution.mean
 
-    def act_student(self, observation_history, policy_info={}):
-        # print("act_student",self.adaptation_module)
-        bz = observation_history.shape[0]
-        latent = self.adaptation_module(observation_history.reshape(bz, -1))
-        actions_mean = self.actor_body(torch.cat((observation_history.reshape(bz, -1), latent), dim=-1))
-        policy_info["latents"] = latent.detach().cpu().numpy()
-        return actions_mean
-
-    def act_teacher(self, observation_history, privileged_info, policy_info={}):
-        bz = observation_history.shape[0]
-        actions_mean = self.actor_body(torch.cat((observation_history.reshape(bz, -1), privileged_info), dim=-1))
-        policy_info["latents"] = privileged_info
-        return actions_mean
-
-    def evaluate(self, observation_history, privileged_observations, **kwargs):
-        bz = observation_history.shape[0]
-        value = self.critic_body(torch.cat((observation_history.reshape(bz,-1), privileged_observations), dim=-1))
+    def evaluate(self, obs, obs_history, privileged_observations, **kwargs):
+        value = self.critic(torch.cat([obs, privileged_observations], dim=-1))
         return value
 
-    def get_student_latent(self, observation_history):
-        bz = observation_history.shape[0]
-        return self.adaptation_module(observation_history.reshape(bz,-1))
+    
+    
+    # region
+    #--------------------- Training ---------------------#
+    def get_latent(self, observation_history):
+        return self.adaptation_module(observation_history)
+    
+    def _update_with_latent(self,obs, latent):
+        mean = self.actor(obs, latent)
+        self.distribution = Normal(mean, mean * 0. + self.std)
+    # endregion
         
-class NominalActorCritic(nn.Module):
+    
+class GraphActor(nn.Module):
+    def __init__(self, 
+                 num_obs,
+                 num_latent,
+                 num_actions,
+                 activation = 'elu',
+                 actor_hidden_dims = [512, 256, 128]):
+        super().__init__()
+        self.num_latent = num_latent
+        # graph info
+        node_base = torch.tensor(list(body_index.values()),dtype=torch.long).squeeze()
+        node_hip = torch.stack([torch.tensor(list(hip_index.values()),dtype=torch.long)],dim=0).squeeze()
+        node_thigh = torch.stack([torch.tensor(list(thigh_index.values()),dtype=torch.long)],dim=0).squeeze()
+        node_calf = torch.stack([torch.tensor(list(calf_index.values()),dtype=torch.long)],dim=0).squeeze()
+        activation_fn = get_activation(activation)
+        self.node_base = nn.Parameter(node_base, requires_grad=False)
+        self.node_hip = nn.Parameter(node_hip, requires_grad=False)
+        self.node_thigh = nn.Parameter(node_thigh, requires_grad=False)
+        self.node_calf = nn.Parameter(node_calf, requires_grad=False) 
+        self.edge = nn.Parameter(torch.as_tensor(edge_index, dtype=torch.long).contiguous().t(),requires_grad=False)
+        # Pipeline
+        # obs-> node, concat with latent -> node latent
+        # node latent -> node level policy -> node action
+        base_input_size =  len(list(body_index.values())[0])
+        hip_input_size = len(list(hip_index.values())[0])
+        thigh_input_size =len(list(thigh_index.values())[0])
+        calf_input_size = len(list(calf_index.values())[0])
+        self.base_net = mlp(base_input_size, num_latent, [128], activation_fn)
+        self.hip_net = mlp(hip_input_size, num_latent, [128], activation_fn)
+        self.thigh_net = mlp(thigh_input_size, num_latent, [128], activation_fn)
+        self.calf_net = mlp(calf_input_size, num_latent, [128], activation_fn)
+
+        # graph neural network 
+        self.gn = ResGatedGraphConv(in_channels=2 * num_latent,
+                                    out_channels=2 * num_latent)
+        self.act = activation_fn
+        self.gn2 = ResGatedGraphConv(in_channels=2 * num_latent,
+                                    out_channels=num_latent)
+        
+        # graph policy : (base, hip, thigh, calf) -> leg_control 
+        self.leg_policy = mlp(4*num_latent, 3, [256,128], activation_fn)
+        self.FL_Leg = nn.Parameter(torch.tensor([0,1,5,9],dtype=torch.long), requires_grad=False)
+        self.FR_Leg = nn.Parameter(torch.tensor([0,2,6,10],dtype=torch.long), requires_grad=False)
+        self.RL_Leg = nn.Parameter(torch.tensor([0,3,7,11],dtype=torch.long), requires_grad=False)
+        self.RR_Leg = nn.Parameter(torch.tensor([0,4,8,12],dtype=torch.long), requires_grad=False)
+
+    
+    def _obs2node(self, obs):
+        # obs.shape = (bz, n_obs)
+        base = obs[:,self.node_base].unsqueeze(1) # (bz, 1, n_base)
+        hip = obs[:,self.node_hip]# (bz, 4, 4)
+        thigh = obs[:,self.node_thigh]
+        calf = obs[:,self.node_calf]
+        base = self.base_net(base)
+        hip = self.hip_net(hip)
+        thigh = self.thigh_net(thigh)
+        calf = self.calf_net(calf)
+        return torch.cat([base,hip,thigh,calf],dim=1) # (bz, n_node,num_latent)
+    def forward(self, obs, latent):
+        # obs.shape = (bz, n_obs)
+        # latent.shape = (bz,n_node, num_latent)
+        obs_nodes = self._obs2node(obs) # (bz, n_node, num_latent) 
+        nodes_latent = torch.cat([obs_nodes,latent],dim=-1) # (bz, n_node, 2*num_latent)
+        nodes_latent = self.gn(nodes_latent, self.edge) # (bz, n_node, 2*num_latent)
+        nodes_latent = self.act(nodes_latent)
+        nodes_latent = self.gn2(nodes_latent, self.edge) 
+        FL_Leg_latent = nodes_latent[:,self.FL_Leg,:].reshape(-1,4*self.num_latent)
+        FR_Leg_latent = nodes_latent[:,self.FR_Leg,:].reshape(-1,4*self.num_latent)
+        RL_Leg_latent = nodes_latent[:,self.RL_Leg,:].reshape(-1,4*self.num_latent)
+        RR_Leg_latent = nodes_latent[:,self.RR_Leg,:].reshape(-1,4*self.num_latent)
+        FL_Leg_action = self.leg_policy(FL_Leg_latent)
+        FR_Leg_action = self.leg_policy(FR_Leg_latent)
+        RL_Leg_action = self.leg_policy(RL_Leg_latent)
+        RR_Leg_action = self.leg_policy(RR_Leg_latent)
+        return torch.cat([FL_Leg_action,FR_Leg_action,RL_Leg_action,RR_Leg_action],dim=1) # (bz, 12)
+
+
+class GraphActorCritic(nn.Module):
     def __init__(self, 
                  num_obs,
                  num_privileged_obs,
                  num_obs_history,
+                 num_history,
+                 num_latent,
                  num_actions,
                  activation = 'elu',
                  actor_hidden_dims = [512, 256, 128],
                  critic_hidden_dims = [512, 256, 128],
                  adaptation_module_branch_hidden_dims = [256, 128],
-                 action_low = -1.0,action_high = 1.0,
-                 init_noise_std = 1.0):
+                 init_noise_std = 1.0,
+                 use_forward = True):
         super().__init__()
-        self.num_obs_history = num_obs_history
-        self.num_privileged_obs = num_privileged_obs
-        activation = get_activation(activation)
-        # Policy
-        mlp_input_dim_a = num_obs
-        self.actor_obs_feature = actor_hidden_dims[0]
+        self.use_forward = use_forward
+        self.adaptation_module = GraphEncoder(num_obs, 
+                                              num_history, 
+                                              num_latent,
+                                              activation)    
+        
+        # Actor 
+        self.actor = GraphActor(num_obs,
+                                      num_latent,
+                                      num_actions,
+                                      activation,
+                                      actor_hidden_dims)
+        
+        # Critic
+        mlp_critic_input = num_privileged_obs + num_obs 
+        self.critic = mlp(mlp_critic_input, 1, critic_hidden_dims, get_activation(activation))
 
-        actor_layers = []
-        actor_layers.append(
-                nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]),
-                )
-        actor_layers.append(activation)
-        for l in range(len(actor_hidden_dims)):
-            if l == len(actor_hidden_dims) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dims[l], num_actions))
-            else:
-                actor_layers.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
-                actor_layers.append(activation)
-        self.actor_body = nn.Sequential(*actor_layers)
-
-
-        # Value function
-        mlp_input_dim_c = num_obs + num_privileged_obs
-        critic_layers = []
-        critic_layers.append(
-            nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]),
-        )
-        critic_layers.append(activation)
-        for l in range(len(critic_hidden_dims)):
-            if l == len(critic_hidden_dims) - 1:
-                critic_layers.append(nn.Linear(critic_hidden_dims[l], 1))
-            else:
-                critic_layers.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
-                critic_layers.append(activation)
-        self.critic_body = nn.Sequential(*critic_layers)
-        Normal.set_default_validate_args = False
-
-        self.actor_body.apply(init_orhtogonal)
-        self.critic_body.apply(init_orhtogonal)
-         # Action noise
-
+        # Forward 
+        if self.use_forward:
+            self.forward_model = GraphForward(num_obs,num_latent,num_actions,activation)
+        # Action noise
         self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
         self.distribution = None
-
-        
-        
+        # disable args validation for speedup
+        Normal.set_default_validate_args = False
+        self.apply(init_orhtogonal)
+    
     @property
     def action_mean(self):
         return self.distribution.mean
@@ -221,115 +331,34 @@ class NominalActorCritic(nn.Module):
         return self.distribution.entropy().sum(dim=-1)
 
     
-    def update_distribution(self, obs):
-        mean = self.actor_body(obs)
+    def update_distribution(self, obs, observation_history):
+        node_latent = self.adaptation_module(observation_history)
+        mean = self.actor(obs, node_latent)
         self.distribution = Normal(mean, mean * 0. + self.std)
 
-    def act(self, obs, observation_history, **kwargs):
-        self.update_distribution(obs)
+    def act(self,obs, observation_history, **kwargs):
+        self.update_distribution(obs,observation_history)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
-    
+
     def act_inference(self, ob, policy_info={}):
-        action_mean = self.actor_body(ob["obs"])
-        return action_mean
-    
-    def evaluate(self,obs, observation_history, privileged_observations, **kwargs):
-        value = self.critic_body(torch.cat((obs, privileged_observations), dim=-1))
-        return value
-
-
-
-
-class SqashedActorCritic(nn.Module):
-    def __init__(self, 
-                 num_obs,
-                 num_privileged_obs,
-                 num_obs_history,
-                 num_actions,
-                 activation = 'elu',
-                 actor_hidden_dims = [512, 256, 128],
-                 critic_hidden_dims = [512, 256, 128],
-                 adaptation_module_branch_hidden_dims = [256, 128],
-                 action_low = -1.0,action_high = 1.0,
-                 init_noise_std = 1.0):
-        super().__init__()
-        self.num_obs_history = num_obs_history
-        self.num_privileged_obs = num_privileged_obs
-        activation = get_activation(activation)
-        # Policy
-        mlp_input_dim_a = num_obs
-        self.actor_obs_feature = actor_hidden_dims[0]
-
-        actor_layers = []
-        actor_layers.append(
-                nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]),
-                )
-        actor_layers.append(activation)
-        for l in range(len(actor_hidden_dims)):
-            if l == len(actor_hidden_dims) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dims[l], num_actions))
-            else:
-                actor_layers.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
-                actor_layers.append(activation)
-        self.actor_body = nn.Sequential(*actor_layers)
-
-
-        # Value function
-        mlp_input_dim_c = num_obs + num_privileged_obs
-        critic_layers = []
-        critic_layers.append(
-            nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]),
-        )
-        critic_layers.append(activation)
-        for l in range(len(critic_hidden_dims)):
-            if l == len(critic_hidden_dims) - 1:
-                critic_layers.append(nn.Linear(critic_hidden_dims[l], 1))
-            else:
-                critic_layers.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
-                critic_layers.append(activation)
-        self.critic_body = nn.Sequential(*critic_layers)
-        Normal.set_default_validate_args = False
-
-        self.actor_body.apply(init_orhtogonal)
-        self.critic_body.apply(init_orhtogonal)
-         # Action noise
-
-        self.distribution = SquashedGaussian(num_actions, action_low, action_high,
-                                     init_std=init_noise_std)
-
-        
-        
-    @property
-    def action_mean(self):
+        self.update_distribution(ob["obs"], ob["obs_history"])
         return self.distribution.mean
 
-    @property
-    def action_std(self):
-        return self.distribution.stddev
-
-    @property
-    def entropy(self):
-        return self.distribution.entropy()
-
-    
-    def update_distribution(self, obs):
-        mean = self.actor_body(obs)
-        self.distribution.update(mean)
-
-    def act(self, obs, observation_history, **kwargs):
-        self.update_distribution(obs)
-        return self.distribution.sample()
-
-    def get_actions_log_prob(self, actions):
-        return self.distribution.get_actions_log_prob(actions)
-    
-    def act_inference(self, ob, policy_info={}):
-        self.update_distribution(ob["obs"])
-        return self.distribution.mean
-    
-    def evaluate(self,obs, observation_history, privileged_observations, **kwargs):
-        value = self.critic_body(torch.cat((obs, privileged_observations), dim=-1))
+    def evaluate(self, obs, obs_history, privileged_observations, **kwargs):
+        value = self.critic(torch.cat([obs, privileged_observations], dim=-1))
         return value
+
+    
+    
+    # region
+    #--------------------- Training ---------------------#
+    def get_latent(self, observation_history):
+        return self.adaptation_module(observation_history)
+    
+    def _update_with_latent(self,obs, latent):
+        mean = self.actor(obs, latent)
+        self.distribution = Normal(mean, mean * 0. + self.std)
+    # endregion
