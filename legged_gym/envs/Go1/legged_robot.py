@@ -95,7 +95,9 @@ class LeggedRobot(BaseTask):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             #! Apply Force 
-            if self.need_apply_force:
+            if self.need_apply_force :
+                if not self.eval:
+                    self._set_force_to_apply()
                 self.apply_force()
                 
 
@@ -1216,14 +1218,7 @@ class LeggedRobot(BaseTask):
         new_index = torch.randint(0, len(self.valid_apply_force_body), size = (len(env_ids),), device=self.device)
         self.body_index[env_ids] = self.valid_apply_force_body[new_index]
 
-    def apply_force(self):
-        """ Apply force to the body with the given index:
-        the force direction is opposite to the agent base_lin_vel's x and y direction
-        Args:
-            force_norm (float): force norm
-            body_index (num_env,): body index
-        """
-
+    def _set_force_to_apply(self):
         x_vel = self.base_lin_vel[:,0]
         y_vel = self.base_ang_vel[:,1]
         vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
@@ -1232,9 +1227,30 @@ class LeggedRobot(BaseTask):
         mask = self.body_index == -1 #! if body_index == -1, then do not apply force
         f_x[mask], f_y[mask],f_z[mask] = 0.0, 0.0, 0.0
         self.force_to_apply[torch.arange(self.num_envs), self.body_index.clamp(min = 0, max = self.num_bodies-1) , 0:3] = torch.stack((f_x,f_y,f_z),dim=1)
+    
+    def set_force_apply(self, index, force_norm,z_force_norm = 0.0):
+        x_vel = self.base_lin_vel[:,0]
+        y_vel = self.base_ang_vel[:,1]
+        vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
+        f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
+        f_z = -z_force_norm
+        self.force_to_apply[:,index,0] = f_x 
+        self.force_to_apply[:,index,1] = f_y
+        self.force_to_apply[:,index,2] = f_z   
+    def reset_force_to_apply(self):
+        self.force_to_apply[:] = 0.0
+
+    def apply_force(self):
+        """ Apply force to the body with the given index:
+        the force direction is opposite to the agent base_lin_vel's x and y direction
+        Args:
+            force_norm (float): force norm
+            body_index (num_env,): body index
+        """
         self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(self.force_to_apply), 
                                                     None,
                                                     gymapi.ENV_SPACE)
+        
     def _push_robots(self, env_ids, cfg):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
@@ -2020,6 +2036,19 @@ class LeggedRobot(BaseTask):
 
     #region
     # ----------- Eval Utils ------------ # 
+    def get_push_data(self):
+        f = self.force_to_apply.mean(dim = (0,2))
+        non_zero_index = torch.nonzero(f,as_tuple=False).flatten()
+        tracking_error = torch.norm(self.commands[:, :2] - self.base_lin_vel[:, :2], dim=-1,p=2).cpu().numpy()
+        f_n_zero = self.force_to_apply[:,non_zero_index,:]
+        res = {
+            'body_index': non_zero_index.unsqueeze(0).repeat((self.num_envs,1)).cpu().numpy(),
+            'force':f_n_zero.cpu().numpy(),
+            'done':self.reset_buf.cpu().numpy(),
+            'tracking_error': tracking_error,
+            'base_vel':self.base_lin_vel[:,0:3].cpu().numpy(),
+        }
+        return res
     def get_eval_data(self):
         """
         1. dof_pos_targt, dof_pos, 

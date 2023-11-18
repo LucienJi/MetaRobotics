@@ -10,31 +10,17 @@ from OnlineAdaptation.configs.training_config import EnvCfg,RunnerCfg
 from OnlineAdaptation.runners.onpolicy_runner import Runner
 from OnlineAdaptation.modules.ac import GraphActorCritic
 import torch 
+from legged_gym.envs.wrapper.push_eval_wrapper import PushConfig,EvalWrapper
 
 
-def launch(args):
-    env_cfg = EnvCfg()
-    train_cfg = RunnerCfg()
+push_config1 = PushConfig(
+    id = 0,
+    body_index_list = [0],
+    change_interval = -1,
+    force_list = [0],
+)
 
-    env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
-    sim_params = {"sim":class_to_dict(env_cfg.sim)}
-    sim_params = parse_sim_params(args, sim_params)
-
-    env = LeggedRobot(sim_params=sim_params,
-                                    physics_engine=args.physics_engine,
-                                    sim_device=args.sim_device,
-                                    headless=args.headless, 
-                                    cfg = env_cfg,eval_cfg=None)
-    env = HistoryWrapper(env) 
-    log_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name)
-    log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
-    
-    _,train_cfg = update_cfg_from_args(None,train_cfg,args)
-    train_cfg_dict = class_to_dict(train_cfg)
-    runner = Runner(env,log_dir,train_cfg,device=args.rl_device)
-    return env, runner ,env_cfg ,train_cfg
-
-def play(args, path = None):
+def eval(args, path = None):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
@@ -43,7 +29,7 @@ def play(args, path = None):
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
     sim_params = parse_sim_params(args, sim_params)
     # load policy
-    headless = False
+    headless = args.headless
     
     device = args.rl_device
     env = LeggedRobot(sim_params=sim_params,
@@ -52,27 +38,33 @@ def play(args, path = None):
                                     headless=headless, 
                                     cfg = env_cfg,eval_cfg=None)
     env = HistoryWrapper(env) 
+    env_pushed = EvalWrapper(env, env_cfg, cmd_vel=[0.5,0.0,0.0],
+                      record=False, move_camera=False,experiment_name='Eval')
+    env_pushed.set_eval_config(
+        eval_config = [push_config1]
+    )
+    
     policy_cfg  = class_to_dict(train_cfg.policy)
     policy = GraphActorCritic(env.num_obs,env.num_privileged_obs,env.num_obs_history,
                               env.num_history,
-                              env.num_actions,
+                              num_actions=env.num_actions,
+                              use_forward=train_cfg.algorithm.use_forward,
                                         **policy_cfg).to(device)
-    
-    env.set_apply_force(0, 50, z_force_norm = 0)
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
-    play_policy(env_cfg,train_cfg,policy,env,cmd_vel = [1.,0.0,0.0],
-                move_camera=False,record=True)
+    for i in range(int(env.max_episode_length) + 10):
+        obs_dict = env_pushed.obs_dict
+        with torch.no_grad():
+            actions = policy.act_inference(obs_dict)
+            env_pushed.step(actions.detach())
+    
+    res = env_pushed.get_result()
+    # print(res)
+    for k,v in res.items():
+        print(k, v.shape)
 
 if __name__ == '__main__':
     args = get_args()
-    if args.play:
-        path = "logs/Debug/Nov13_09-09-03_Guide/model_5000.pt"
-        play(args,path)
-        exit()
-    else:
-        env, runner , env_cfg ,train_cfg = launch(args)
-        runner.learn(num_learning_iterations=10000)
-
-    
-    
+    path = "logs/Graph/Nov16_21-53-18_NoForward/model_10000.pt"
+    eval(args,path)
+    exit()
