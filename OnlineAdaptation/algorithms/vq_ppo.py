@@ -86,6 +86,7 @@ class PPO:
         mean_surrogate_loss = 0   
         mean_forward_loss = 0     
         mean_cmt_loss = 0.0 
+        mean_orth_loss = 0.0
         generator = self.storage.mini_batch_generator(self.cfg.num_mini_batches, self.cfg.num_learning_epochs)
         
         self.actor_critic.train()
@@ -94,7 +95,7 @@ class PPO:
             
             #! two-stage 
             
-            latent,cmt_loss = self.actor_critic.get_latent_and_loss(obs_history_batch)
+            latent,vq_loss, vq_loss_info = self.actor_critic.get_latent_and_loss(obs_history_batch)
             self.actor_critic._update_with_latent(obs_batch,latent)
 
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
@@ -140,7 +141,7 @@ class PPO:
 
             loss = surrogate_loss + self.cfg.value_loss_coef * value_loss \
                 - self.entropy_coef * entropy_batch.mean() \
-                + cmt_loss 
+                + vq_loss 
 
             # Gradient step
             self.optimizer.zero_grad()
@@ -151,7 +152,8 @@ class PPO:
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy_loss += entropy_batch.mean().item()
-            mean_cmt_loss += cmt_loss.mean().item()
+            mean_cmt_loss += vq_loss_info['commit_loss']
+            mean_orth_loss += vq_loss_info['orthogonal_reg_loss']
 
             #! self-supervised learning
             if self.use_forward:
@@ -173,8 +175,9 @@ class PPO:
         mean_entropy_loss /= num_updates
         mean_forward_loss /= (num_updates * self.cfg.num_adaptation_module_substeps)
         mean_cmt_loss /= num_updates 
+        mean_orth_loss /= num_updates
       
         self.storage.clear()
         self.actor_critic.eval()
 
-        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss,mean_cmt_loss
+        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss,mean_cmt_loss,mean_orth_loss

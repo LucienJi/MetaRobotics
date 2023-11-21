@@ -35,6 +35,8 @@ def unfreeze(model):
     for param in model.parameters():
         param.requires_grad = True
 
+
+
 def get_activation(act_name):
     if act_name == "elu":
         return nn.ELU()

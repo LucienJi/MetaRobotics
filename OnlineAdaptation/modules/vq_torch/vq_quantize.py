@@ -867,6 +867,7 @@ class VectorQuantize(nn.Module):
             height, width = x.shape[-2:]
             x = rearrange(x, 'b c h w -> b (h w) c')
 
+        #! 一定需要将 feature dim 放在最后 
         if need_transpose:
             x = rearrange(x, 'b d n -> b n d')
 

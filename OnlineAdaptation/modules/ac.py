@@ -6,8 +6,18 @@ from utils.torch_utils import  get_activation,init_orhtogonal,SquashedGaussian
 from .adaptation_module import body_index,hip_index,thigh_index,calf_index,edge_index,GraphEncoder,mlp , MLPHistoryEncoder
 from torch_geometric.nn import ResGatedGraphConv, GatedGraphConv
 from .forward_model import GraphForward,MLPForward
-from .vq_torch.vq_quantize import VectorQuantize
+# from .vq_torch.vq_quantize import VectorQuantize
+from .vq_torch.my_vq import VectorQuantize
 
+
+
+class Elephant(nn.Module):
+    def __init__(self, a, d):
+        super().__init__()
+        self.a = a
+        self.d = d 
+    def forward(self, x):
+        return 1.0/(1.0 + torch.abs(x/self.a)**self.d)
 
 class VQActorCritic(nn.Module):
     def __init__(self, 
@@ -22,30 +32,47 @@ class VQActorCritic(nn.Module):
                  critic_hidden_dims = [512, 256, 128],
                  adaptation_module_branch_hidden_dims = [256, 128],
                  init_noise_std = 1.0,
-                 use_forward = False):
+                 commitment_weight = 1.0,
+                 orthogonal_reg_weight = 0.0,
+                 ema_update=True,
+                 decay=0.8,
+                 eps= 1e-5,
+                 codebook_size = 256,
+                 n_heads = 4,
+                 use_forward = False,
+                 elephant_actor = False):
         super().__init__()
 
         # Actor 
         self.use_forward = use_forward
-        codebook_size = 128 # num code in 1 head 
-        heads,codebook_dim = 8 , 32 
-        dim = heads * codebook_dim
+        self.elephant_actor = elephant_actor
+        dim = num_latent
         input_size = num_obs_history
         act_fn = get_activation(activation)
         self.adaptation_module = nn.Sequential(
-            nn.Linear(input_size, input_size * 2),
+            nn.Linear(input_size, dim * 2),
             act_fn,
-            nn.Linear(input_size * 2, dim),
+            nn.Linear(dim * 2, dim),
         )
-        self.vq = VectorQuantize(dim = dim , codebook_size=codebook_size,codebook_dim=codebook_dim,
-                           heads=heads, separate_codebook_per_head=True,
-                           orthogonal_reg_weight=0.0,
-                           )
+        self.vq = VectorQuantize(
+            input_dim = dim,
+            n_head=n_heads,
+            codebook_size=codebook_size,
+            commitment_weight=commitment_weight,
+            orthogonal_reg_weight=orthogonal_reg_weight,
+            ema_update=ema_update,
+            decay=decay,
+            eps= eps,
+        )
         
         actor_input_size = num_obs + dim
+        if not elephant_actor:
+            actor_act = get_activation(activation)
+        else:
+            actor_act = Elephant(1.0, 4.0)
         self.actor = mlp(
             input_dim=actor_input_size,
-            out_dim=num_actions,hidden_sizes=actor_hidden_dims,activations=get_activation(activation)
+            out_dim=num_actions,hidden_sizes=actor_hidden_dims,activations=actor_act
         )
 
         # Critic 
@@ -60,6 +87,8 @@ class VQActorCritic(nn.Module):
         # disable args validation for speedup
         Normal.set_default_validate_args = False
         self.apply(init_orhtogonal)
+        print("VQActorCritic")
+        print(self)
         
     @property
     def action_mean(self):
@@ -75,7 +104,7 @@ class VQActorCritic(nn.Module):
     def update_distribution(self, obs, observation_history):
         observation_history = observation_history.reshape(observation_history.shape[0],-1)
         latent= self.adaptation_module(observation_history)
-        latent,indices, loss  = self.vq(latent)
+        latent,indices, loss,loss_info  = self.vq(latent)
         mean = self.actor(torch.cat([obs, latent], dim=-1))
         self.distribution = Normal(mean, mean * 0. + self.std)
 
@@ -93,20 +122,42 @@ class VQActorCritic(nn.Module):
     def evaluate(self, obs, obs_history, privileged_observations, **kwargs):
         value = self.critic(torch.cat([obs, privileged_observations], dim=-1))
         return value
-
-    
     
     # region
     #--------------------- Training ---------------------#
     def get_latent_and_loss(self, observation_history):
         observation_history = observation_history.reshape(observation_history.shape[0],-1)
         latent = self.adaptation_module(observation_history)
-        latent,indices, loss = self.vq(latent)
-        return latent, loss 
+        latent,indices, loss , loss_info = self.vq(latent)
+        return latent, loss , loss_info
     
     def _update_with_latent(self,obs, latent):
         mean = self.actor(torch.cat([obs, latent], dim=-1))
         self.distribution = Normal(mean, mean * 0. + self.std)
+    # endregion
+
+    # region
+    #--------------------- Eval ---------------------#
+    def get_VQ_info(self,obs_dict):
+        obs_history = obs_dict["obs_history"]
+        obs_history = obs_history.reshape(obs_history.shape[0],-1)
+        latent = self.adaptation_module(obs_history)
+        latent, indices, distances = self.vq.get_info(latent)
+        return latent, indices, distances
+    # endregion
+
+    # region
+    # --------------------- Utils ---------------------#
+    def mask_VQ(self, percentage):
+        if hasattr(self.vq._codebook, "mask_percentage"):
+            self.vq._codebook.mask_percentage(percentage)
+    
+    def unmask_VQ(self):
+        if hasattr(self.vq._codebook, "unmask_all"):
+            self.vq._codebook.unmask_all()
+    def random_mask_VQ(self, percentage):
+        if hasattr(self.vq._codebook, "random_mask"):
+            self.vq._codebook.random_mask()
     # endregion
 
 

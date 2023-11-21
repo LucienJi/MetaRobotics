@@ -183,6 +183,13 @@ class RewardLib:
         body_height = self.env.base_pos[:, 2] - reference_heights
         height_target = self.env.cfg.rewards.base_height_target - reference_heights
         return torch.square(body_height - height_target)
+    
+    def _reward_body_height_v2(self):
+        reference_heights = 0 
+        body_height = self.env.base_pos[:, 2] - reference_heights
+        height_target = self.env.cfg.rewards.base_height_target - reference_heights
+        delta_height = (body_height - height_target).clamp(max=0.0)
+        return torch.square(delta_height)
     # endregion
 
     """ Custom Task Reward Functions """

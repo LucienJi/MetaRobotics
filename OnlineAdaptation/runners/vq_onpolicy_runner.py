@@ -47,7 +47,35 @@ class Runner:
             if not os.path.exists(self.log_dir):
                 os.makedirs(self.log_dir)
 
+        if self.env.need_apply_force:
+            self.start_push = self.cfg.start_push   
+        else:
+            self.start_push = -1 
+        
+        #! 用于判断是否使用训练阶段
+        self.use_training_stage = self.cfg.use_training_stage
+        self.training_stage = self.cfg.training_stage
+
+        if self.start_push > -1:
+            self.env.set_need_force_to_apply(False)
         self.env.reset()
+        
+        
+    def set_push(self,it):
+        if self.start_push > -1:
+            if it > self.start_push:
+                self.env.set_need_force_to_apply(True)
+            else:
+                self.env.set_need_force_to_apply(False)
+        else:
+            self.env.set_need_force_to_apply(False)
+
+    def set_trianing_stage(self,it):
+        if self.use_training_stage and len(self.training_stage) > 0:
+            if it > self.training_stage[0][0]:
+                self.env.reset_valid_body_index(self.training_stage[0][1])
+                self.alg.actor_critic.mask_VQ(self.training_stage[0][2])
+                self.training_stage.pop(0)
 
     def learn(self, num_learning_iterations):
         mean_adaptation_module_loss = 0.0
@@ -58,7 +86,7 @@ class Runner:
         obs_dict = self.env.get_observations()  # TODO: check, is this correct on the first step?
         for k,v in obs_dict.items():
             obs_dict[k] = v.to(self.device) 
-        self.alg.actor_critic.train()  # switch to train mode (for dropout for example)
+        self.alg.actor_critic.eval()  # switch to train mode (for dropout for example)
         ep_infos = []
         rewbuffer = deque(maxlen=100)
         lenbuffer = deque(maxlen=100)
@@ -67,12 +95,18 @@ class Runner:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         for it in range(self.current_learning_iteration, tot_iter):
+            
+            #! 先通常训练, 有助于平稳步态
+            self.set_push(it)
+            self.set_trianing_stage(it)
+            
             start = time.time()
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs_dict["obs"],obs_dict["privileged_obs"], obs_dict["obs_history"])
                     ret = self.env.step(actions)
+                    # self.env.debug_apply_force(it)
                     obs_dict, rewards, dones, infos = ret
                     for k,v in obs_dict.items():
                         obs_dict[k] = v.to(self.device)
@@ -98,7 +132,7 @@ class Runner:
                 start = stop
                 self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'],obs_dict['obs_history'])
 
-            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss,mean_cmt_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss,mean_cmt_loss,mean_orth_loss = self.alg.update()
             stop = time.time()
             learn_time = stop - start
             if it % self.save_interval == 0:
@@ -108,6 +142,7 @@ class Runner:
                 self.log(locals())
             ep_infos.clear()
 
+            
     
             self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
 
@@ -169,6 +204,7 @@ class Runner:
         self.writer.add_scalar('Loss/value_function', locs['mean_value_loss'], locs['it'])
         self.writer.add_scalar('Loss/forward prediction', locs['mean_forward_loss'], locs['it'])
         self.writer.add_scalar('Loss/CMT Loss', locs['mean_cmt_loss'], locs['it'])
+        self.writer.add_scalar('Loss/Ortho Loss', locs['mean_orth_loss'], locs['it'])
         self.writer.add_scalar('Loss/surrogate', locs['mean_surrogate_loss'], locs['it'])
         self.writer.add_scalar('Loss/entropy', locs['mean_entropy_loss'], locs['it'])
         self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, locs['it'])
@@ -198,6 +234,7 @@ class Runner:
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
                           f"""{'CMT loss:':>{pad}} {locs['mean_cmt_loss']:.4f}\n"""
+                          f"""{'Ortho loss:':>{pad}} {locs['mean_orth_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
@@ -213,6 +250,7 @@ class Runner:
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                           f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
                           f"""{'CMT loss:':>{pad}} {locs['mean_cmt_loss']:.4f}\n"""
+                          f"""{'Ortho loss:':>{pad}} {locs['mean_orth_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n""")

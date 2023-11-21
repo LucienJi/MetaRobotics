@@ -138,8 +138,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_y',
                 'init_low':-0.3,
                 'init_high':0.3,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             },
@@ -147,8 +147,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_yaw',
                 'init_low':-0.2,
                 'init_high':0.2,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             }
@@ -184,6 +184,7 @@ class EnvCfg(BasicCfg):
         dof_vel = -0.
         dof_acc = -5e-7 # -2.5e-7
         collision = -1. # -1.0
+        body_height_v2 = -1.0
         action_rate = -0.01# -0.01 # -0.01 #TODO: 暂时删除action震荡的penalty
 
     class domain_rand(BasicCfg.domain_rand):
@@ -201,14 +202,17 @@ class EnvCfg(BasicCfg):
         motor_strength_range = [0.9, 1.1]
         randomize_lag_timesteps = False
         lag_timesteps = 6
-        push_robots = True
+        push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
 
     class force_apply:
         apply_force = True 
+        push_interval = 200
         resampling_time = 10.
-        body_index = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,-1] # 0-17, 18 bodies
+        # body_index = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,-1] # 0-17, 18 bodies
+        # body_index = [0,2,3,4,6,7,8,10,11,12,14,15,16,-1] # 0-17, 18 bodies
+        body_index = [-1,0,2,6,10,14, 3,7,11,15] # 先只做 base 和 thigh 的 force apply
         max_force = 50.0
         min_force = 10.0
         max_z_force = 10.0 
@@ -243,10 +247,20 @@ class RunnerCfg(BasicRunnerCfg):
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         adaptation_module_branch_hidden_dims = [256, 128]
-        num_latent = 16 
+        num_latent = 128
         activation = 'lrelu'
+
+        #! VQ 用的
+        commitment_weight = 1.0
+        orthogonal_reg_weight = 0.1
+        codebook_size = 256 
+        n_heads = 4
+        ema_update=True
+        decay=0.8
+        eps= 1e-5
+        elephant_actor = False
     class runner:
-        run_name = 'NoForward'
+        run_name = 'Baseline_Elephant_no_stage'
         experiment_name = 'VQ'
         
         num_steps_per_env = 24 # per iteration
@@ -258,4 +272,11 @@ class RunnerCfg(BasicRunnerCfg):
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt 
+        start_push = 2000
+        use_training_stage = False 
+        training_stage = [
+            (-1,[-1],0.8),
+            (2000,[-1,0,2,6,10,14], 0.4),
+            (5000,[-1,0,2,6,10,14, 3,7,11,15],0)
+        ]
 

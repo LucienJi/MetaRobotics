@@ -12,13 +12,33 @@ from OnlineAdaptation.modules.ac import VQActorCritic
 import torch 
 from legged_gym.envs.wrapper.push_eval_wrapper import PushConfig,EvalWrapper
 
+push_config0 = PushConfig(
+    id = 0,
+    body_index_list = [-1],
+    change_interval = 100,
+    force_list = [0],
 
+)
 push_config1 = PushConfig(
     id = 0,
-    body_index_list = [0],
-    change_interval = -1,
-    force_list = [0],
+    body_index_list = [-1,0],
+    change_interval = 100,
+    force_list = [30],
 )
+push_config2 = PushConfig(
+    id = 1,
+    body_index_list = [-1,2],
+    change_interval = 100,
+    force_list = [30],
+)
+
+push_config3 = PushConfig(
+    id = 2,
+    body_index_list = [-1,7],
+    change_interval = 100,
+    force_list = [30],
+)
+
 
 def eval(args, path = None):
     env_cfg = EnvCfg()
@@ -41,7 +61,7 @@ def eval(args, path = None):
     env_pushed = EvalWrapper(env, env_cfg, cmd_vel=[0.5,0.0,0.0],
                       record=False, move_camera=False,experiment_name='Eval')
     env_pushed.set_eval_config(
-        eval_config = [push_config1]
+        eval_config = [push_config0]
     )
     
     policy_cfg  = class_to_dict(train_cfg.policy)
@@ -52,6 +72,7 @@ def eval(args, path = None):
                                         **policy_cfg).to(device)
     if path is not None:
         policy.load_state_dict(torch.load(path)['model_state_dict'])
+    policy.eval()
     for i in range(int(env.max_episode_length) + 10):
         obs_dict = env_pushed.obs_dict
         with torch.no_grad():
@@ -65,6 +86,6 @@ def eval(args, path = None):
 
 if __name__ == '__main__':
     args = get_args()
-    path = "logs/VQ/Nov16_22-54-45_NoForward/model_10000.pt"
+    path = "logs/VQ/Nov20_11-36-51_Baseline_no_stage/model_10000.pt"
     eval(args,path)
     exit()

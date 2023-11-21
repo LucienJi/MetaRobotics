@@ -46,6 +46,7 @@ class LeggedRobot(BaseTask):
         #! Apply Force Task
         if hasattr(self.cfg,'force_apply') and self.cfg.force_apply:
             self.need_apply_force = True 
+            self.apply_force_interval = self.cfg.force_apply.push_interval
             valid_apply_force_body = self.cfg.force_apply.body_index 
             self.valid_apply_force_body = torch.tensor(valid_apply_force_body, dtype=torch.long, device=sim_device,requires_grad=False)
             self.max_force_apply = self.cfg.force_apply.max_force
@@ -72,9 +73,7 @@ class LeggedRobot(BaseTask):
         self.record_eval_now = False
         self.collecting_evaluation = False
         self.num_still_evaluating = 0
-        
-        
-
+    
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -149,9 +148,10 @@ class LeggedRobot(BaseTask):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.extras['reset_env_ids'] = env_ids
-        self.extras['terminal_amp_states'] = self.get_amp_observations()[env_ids]
-        self.reset_idx(env_ids)
+        # self.extras['terminal_amp_states'] = self.get_amp_observations()[env_ids]
+        
         self.compute_observations()
+        self.reset_idx(env_ids) #! 我交换了一个 compute observation 和 reset idx 的顺序, 不知道会不会有影响
 
         self.last_last_actions[:] = self.last_actions[:]
         self.last_actions[:] = self.actions[:]
@@ -162,13 +162,10 @@ class LeggedRobot(BaseTask):
         contact = self.contact_forces[:, self.feet_indices, 2] > 1.0 
         self.last_contacts[:] = self.contacts[:]
         self.contacts[:] = contact[:]
-        #! Re
 
+        #! 我把 resample 放在 compute observation 之后, 不然的话 task idx 和 force 会出现差别
+        self._resample_switch_force_to_apply()
 
-        # if self.viewer and self.enable_viewer_sync and self.debug_viz:
-        #     self._draw_debug_vis()
-
-        # self._render_headless()
 
     def check_termination(self):
         """ Check if environments need to be reset
@@ -725,12 +722,6 @@ class LeggedRobot(BaseTask):
             sample_interval = int(self.cfg.commands.resampling_time / self.dt)
             env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
             self._resample_commands(env_ids)
-        # resample push force 
-
-        if not self.eval and self.need_apply_force:
-            sample_interval = int(self.cfg.force_apply.resampling_time/self.dt)
-            env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
-            self._reset_force_to_apply(env_ids)
         
         # self._step_custom_contact_targets()
 
@@ -1200,10 +1191,37 @@ class LeggedRobot(BaseTask):
     
     # ------------- Utils ------------- 
     # region Utils
-    def set_apply_force(self,body_index, force_norm, z_force_norm = 0):
-        self.body_index[:] = body_index
-        self.xy_force_norm[:] = force_norm
-        self.z_force_norm[:] = z_force_norm
+
+    ## ------ Interface with gym --------
+    def set_force_apply(self, index, force_norm,z_force_norm = 0.0):
+        if index == -1 :
+            # index = -1, 不 apply force 
+            return
+        x_vel = self.base_lin_vel[:,0]
+        y_vel = self.base_ang_vel[:,1]
+        vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
+        f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
+        f_z = -z_force_norm
+        self.force_to_apply[:,index,0] = f_x 
+        self.force_to_apply[:,index,1] = f_y
+        self.force_to_apply[:,index,2] = f_z   
+    def reset_force_to_apply(self):
+        self.force_to_apply[:] = 0.0
+    
+    def set_need_force_to_apply(self, state = False):
+        self.need_apply_force = state 
+        if not self.need_apply_force:
+            self.force_to_apply[:] = 0.0
+            self.valid_force_env_index[:] = 0
+    def reset_valid_body_index(self, valid_body_index:list):
+        self.valid_apply_force_body = torch.tensor(valid_body_index, dtype=torch.long, device=self.device,requires_grad=False)
+
+    ## ----- Internal Utils --------
+    
+    def _switch_valid_push_env(self,env_ids):
+        self.valid_force_env_index[env_ids] = torch.logical_not(self.valid_force_env_index[env_ids])
+        # valid 的部分使用 raw_body_index, invalid 的部分使用 -1
+        self.body_index[env_ids] = self._raw_body_index[env_ids] * self.valid_force_env_index[env_ids].to(dtype=torch.int32) - 1 * torch.logical_not(self.valid_force_env_index[env_ids]).to(dtype=torch.int32)
 
     def _reset_force_to_apply(self, env_ids):
         self.force_to_apply[env_ids] = 0.0
@@ -1217,28 +1235,38 @@ class LeggedRobot(BaseTask):
                                                 device = self.device).squeeze(1)
         new_index = torch.randint(0, len(self.valid_apply_force_body), size = (len(env_ids),), device=self.device)
         self.body_index[env_ids] = self.valid_apply_force_body[new_index]
+        self._raw_body_index[env_ids] = self.body_index[env_ids]
+    
+    def _resample_switch_force_to_apply(self):
+        # resample push force 
+        if not self.eval and self.need_apply_force:
+            sample_interval = int(self.cfg.force_apply.resampling_time/self.dt)
+            env_ids = (self.episode_length_buf % sample_interval == 0).nonzero(as_tuple=False).flatten()
+            self._reset_force_to_apply(env_ids)
+            #! 实现间隔的 push ,这里是 push 完才
+            env_ids = (self.episode_length_buf % self.apply_force_interval == 0).nonzero(as_tuple=False).flatten()
+            self._switch_valid_push_env(env_ids)
 
     def _set_force_to_apply(self):
-        x_vel = self.base_lin_vel[:,0]
-        y_vel = self.base_ang_vel[:,1]
-        vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
-        f_x,f_y = -self.xy_force_norm * x_vel / (vel_norm + 1e-6), -self.xy_force_norm * y_vel / (vel_norm + 1e-6)
-        f_z = -self.z_force_norm
+        self.force_to_apply[:] = 0.0
+        cmd_x_vel = self.commands[:,0]
+        cmd_y_vel = self.commands[:,1]
+        vel_norm = torch.sqrt(cmd_x_vel**2 + cmd_y_vel**2)
+        f_x,f_y = -self.xy_force_norm * (cmd_x_vel+ 1e-6) / (vel_norm + 1e-4), -self.xy_force_norm * (cmd_y_vel+ 1e-6) / (vel_norm + 1e-4)
+        f_z = - torch.min(self.z_force_norm, f_x * 0.5)
+        f_z = - torch.min(f_z, f_y * 0.5)
+
+        #! -1 是
+        
         mask = self.body_index == -1 #! if body_index == -1, then do not apply force
         f_x[mask], f_y[mask],f_z[mask] = 0.0, 0.0, 0.0
         self.force_to_apply[torch.arange(self.num_envs), self.body_index.clamp(min = 0, max = self.num_bodies-1) , 0:3] = torch.stack((f_x,f_y,f_z),dim=1)
     
-    def set_force_apply(self, index, force_norm,z_force_norm = 0.0):
-        x_vel = self.base_lin_vel[:,0]
-        y_vel = self.base_ang_vel[:,1]
-        vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
-        f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
-        f_z = -z_force_norm
-        self.force_to_apply[:,index,0] = f_x 
-        self.force_to_apply[:,index,1] = f_y
-        self.force_to_apply[:,index,2] = f_z   
-    def reset_force_to_apply(self):
-        self.force_to_apply[:] = 0.0
+    
+    def debug_apply_force(self,it):
+        print("debug: ", it)
+        print("debug:", self.commands[:,0:2])
+        print("debug: ", self.force_to_apply)
 
     def apply_force(self):
         """ Apply force to the body with the given index:
@@ -1247,6 +1275,10 @@ class LeggedRobot(BaseTask):
             force_norm (float): force norm
             body_index (num_env,): body index
         """
+        # print("Debug Raw Body index", self._raw_body_index.cpu().numpy())
+        # print("Debug Body index", self.body_index.cpu().numpy())
+        # print("Debug Valid Force Env Index", self.valid_force_env_index.cpu().numpy())
+        # print("Debug Force", self.force_to_apply.nonzero(as_tuple=False).flatten())
         self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(self.force_to_apply), 
                                                     None,
                                                     gymapi.ENV_SPACE)
@@ -1558,9 +1590,14 @@ class LeggedRobot(BaseTask):
                                                    requires_grad=False)
         self.halftime_clock_inputs = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device,
                                                  requires_grad=False)
-        
+    
         #! add task inds 
+        self.valid_force_env_index = torch.ones(self.num_envs,dtype=torch.bool, device=self.device,requires_grad=False)
+        #! select body index
+        self._raw_body_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device,requires_grad=False)
+        #! real body index to use
         self.body_index = torch.zeros(self.num_envs, dtype=torch.long, device=self.device,requires_grad=False)
+        self.body_index[:] = -1 #! 初始化为 -1, 表示不 apply force
         self.xy_force_norm = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,requires_grad=False) 
         self.z_force_norm = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,requires_grad=False) 
         self.force_to_apply = torch.zeros(self.num_envs, self.num_bodies, 3, dtype=torch.float, device=self.device,requires_grad=False)
@@ -2037,13 +2074,12 @@ class LeggedRobot(BaseTask):
     #region
     # ----------- Eval Utils ------------ # 
     def get_push_data(self):
-        f = self.force_to_apply.mean(dim = (0,2))
-        non_zero_index = torch.nonzero(f,as_tuple=False).flatten()
+        # f = self.force_to_apply.mean(dim = (0,2))
+        # non_zero_index = torch.nonzero(f,as_tuple=False).flatten()
         tracking_error = torch.norm(self.commands[:, :2] - self.base_lin_vel[:, :2], dim=-1,p=2).cpu().numpy()
-        f_n_zero = self.force_to_apply[:,non_zero_index,:]
+        # f_n_zero = self.force_to_apply[:,non_zero_index,:]
         res = {
-            'body_index': non_zero_index.unsqueeze(0).repeat((self.num_envs,1)).cpu().numpy(),
-            'force':f_n_zero.cpu().numpy(),
+            'force':self.force_to_apply.cpu().numpy(),
             'done':self.reset_buf.cpu().numpy(),
             'tracking_error': tracking_error,
             'base_vel':self.base_lin_vel[:,0:3].cpu().numpy(),
