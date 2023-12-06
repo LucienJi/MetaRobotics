@@ -66,9 +66,11 @@ class EvalWrapper():
             self.eval_config = eval_config
     
     
-    def step(self, action):
+    def step(self, action,draw = False):
         for config in self.eval_config:
             self.env.set_force_apply(config._body_index, config._force, z_force_norm = 0)
+            if draw:
+                self.env.draw_force(config._body_index)
             if config.change_interval > 0 and (self.step_ct% config.change_interval == 0):
                 config._change()
                 
@@ -89,6 +91,8 @@ class EvalWrapper():
         if self.move_camera:
             self.camera_position += self.camera_vel * self.env.dt
             self.env.set_camera(self.camera_position, self.camera_position + self.camera_direction)
+        if draw:
+            self.env.gym.clear_lines(self.env.viewer)
         
     def get_result(self):
         for k,v in self.eval_res.items():

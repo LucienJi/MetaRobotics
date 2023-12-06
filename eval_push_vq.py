@@ -15,9 +15,9 @@ import numpy as np
 
 stationary_push_config = PushConfig(
     id = 0,
-    body_index_list = [2,3,4],
+    body_index_list = [4],
     change_interval = 100,
-    force_list = [50],
+    force_list = [100],
 
 )
 
@@ -26,7 +26,7 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval',
                     eval_path = "logs/Eval"):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 10)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -60,7 +60,7 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval',
         obs_dict = env_pushed.obs_dict
         with torch.no_grad():
             actions = policy.act_inference(obs_dict)
-            env_pushed.step(actions.detach())
+            env_pushed.step(actions.detach(), draw=True)
     
     eval_res = env_pushed.get_result()
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     args = get_args()
     path = "logs/VQ/Dec04_22-47-20_STG_4_head/model_10000.pt"
     eval_stationary(args,path,
-                    cmd_vel=[0.5,0.0,0.0],
+                    cmd_vel=[0.1,0.0,0.0],
                     name = 'DebugEval',
                     eval_path = "logs/Eval")
     print("Done")

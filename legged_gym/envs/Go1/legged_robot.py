@@ -140,6 +140,7 @@ class LeggedRobot(BaseTask):
 
         self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
                               0:3]
+        self.body_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:,:,0:3]
 
         self._post_physics_step_callback()
 
@@ -1193,6 +1194,20 @@ class LeggedRobot(BaseTask):
     # region Utils
 
     ## ------ Interface with gym --------
+    def draw_force(self,index):
+        if index == -1 :
+            return 
+        for i in range(self.num_envs):
+            p1 = self.body_positions[i,index,:]
+            force = self.force_to_apply[i,index,:]
+            # print("Check: ", force )
+            force_norm = torch.sqrt(force[0]**2 + force[1]**2 + force[2]**2)
+            force = force / (force_norm + 1e-6) * 0.1 
+            color = gymapi.Vec3(1.0, 0.0, 0.0)
+            p1_ = gymapi.Vec3(p1[0], p1[1], p1[2])
+            p2_ = gymapi.Vec3(p1[0] + force[0], p1[1]+ force[1], p1[2]+ force[2])
+            gymutil.draw_line(p1_, p2_, color, self.gym, self.viewer, self.envs[i])
+
     def set_force_apply(self, index, force_norm,z_force_norm = 0.0):
         """
         目前简化 apply force, 只 apply 在 x, y 方向上
@@ -1200,12 +1215,16 @@ class LeggedRobot(BaseTask):
         if index == -1 :
             # index = -1, 不 apply force 
             return
-        x_vel = self.base_lin_vel[:,0]
-        y_vel = self.base_ang_vel[:,1]
+        #! 尝试让 command 从 base 到 global 
+        cmd_global = quat_rotate(self.base_quat, self.commands[:,0:3])
+        x_vel = cmd_global[:,0]
+        y_vel = cmd_global[:,1]
+        # x_vel = self.commands[:,0]
+        # y_vel = self.commands[:,1]
         vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
         # f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
-        f_x = -force_norm* (x_vel+ 1e-6) / (torch.abs(x_vel) + 1e-6)
-        f_y = torch.zeros_like(f_x)
+        f_x = -force_norm* (x_vel+ 1e-6) / (torch.abs(vel_norm) + 1e-6)
+        f_y = -force_norm* (y_vel+ 1e-6) / (torch.abs(vel_norm) + 1e-6)
         f_z = -z_force_norm
         self.force_to_apply[:,index,0] = f_x 
         self.force_to_apply[:,index,1] = f_y
@@ -1257,14 +1276,15 @@ class LeggedRobot(BaseTask):
         增加 x, z 方向的 force, 假如有 y 方向的速度,
         """
         self.force_to_apply[:] = 0.0
-        cmd_x_vel = self.commands[:,0]
-        cmd_y_vel = self.commands[:,1]
-        vel_norm = torch.sqrt(cmd_x_vel**2 + cmd_y_vel**2)
-        f_x = -self.xy_force_norm * (cmd_x_vel+ 1e-6) / (vel_norm + 1e-4)
-        # f_y = -self.xy_force_norm * (cmd_y_vel+ 1e-6) / (vel_norm + 1e-4)
-        f_y = torch.zeros_like(f_x)
-        f_z = - torch.min(self.z_force_norm, f_x * 0.5)
+        cmd_global = quat_rotate(self.base_quat, self.commands[:,0:3])
+        cmd_x_vel = cmd_global[:,0]
+        cmd_y_vel = cmd_global[:,1]
 
+        vel_norm = torch.sqrt(cmd_x_vel**2 + cmd_y_vel**2)
+
+        f_x = -self.xy_force_norm * (cmd_x_vel+ 1e-6) / (vel_norm + 1e-6)
+        f_y = -self.xy_force_norm * (cmd_y_vel+ 1e-6) / (vel_norm + 1e-6)
+        f_z = - torch.min(self.z_force_norm, self.xy_force_norm * 0.5)
         #! -1 是
         
         mask = self.body_index == -1 #! if body_index == -1, then do not apply force
@@ -1291,6 +1311,7 @@ class LeggedRobot(BaseTask):
         self.gym.apply_rigid_body_force_tensors(self.sim, gymtorch.unwrap_tensor(self.force_to_apply), 
                                                     None,
                                                     gymapi.ENV_SPACE)
+                                                    # gymapi.LOCAL_SPACE)
         
     def _push_robots(self, env_ids, cfg):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
@@ -1435,6 +1456,7 @@ class LeggedRobot(BaseTask):
                                7:10]
         self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
                               0:3]
+        self.body_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:,:,0:3]
         self.prev_base_pos = self.base_pos.clone()
         self.prev_foot_velocities = self.foot_velocities.clone()
         self.prev_foot_positions = self.foot_positions.clone()
