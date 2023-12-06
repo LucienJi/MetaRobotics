@@ -5,7 +5,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
 from legged_gym.utils.helpers import class_to_dict,update_class_from_dict,parse_sim_params,get_load_path,update_cfg_from_args,get_args
 from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
 from visualization.play_helper import play_policy
-from RMA.configs.training_config import EnvCfg,RunnerCfg
+from RMA.configs.push_training_config import EnvCfg,RunnerCfg
 from RMA.runners.onpolicy_runner import Runner
 from RMA.modules.ac import ActorCritic
 import torch 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
         exit()
     else:
         env, runner , env_cfg ,train_cfg = launch(args)
-        runner.learn(num_learning_iterations=5000)
+        runner.learn(num_learning_iterations=10000)
 
     
     

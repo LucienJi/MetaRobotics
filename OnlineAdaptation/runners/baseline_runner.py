@@ -4,9 +4,9 @@ import statistics
 from collections import deque 
 
 from utils.torch_utils import VecEnv,class_to_dict,dump_info,NumpyEncoder
-from Expert.configs.training_config import RunnerCfg
-from Expert.modules.ac import ActorCritic  
-from Expert.algorithms.ppo import PPO  
+from OnlineAdaptation.configs.training_config import RunnerCfg
+from OnlineAdaptation.modules.ac import ActorCritic, RMAActorCritic
+from OnlineAdaptation.algorithms.ppo import PPO  
 import torch 
 import numpy as np 
 
@@ -20,10 +20,12 @@ class Runner:
         self.ppo_cfg = cfg.algorithm
 
         policy_cfg = class_to_dict(self.policy_cfg)
-        actor_critic = ActorCritic(self.env.num_obs,
-                                      self.env.num_privileged_obs,
-                                      self.env.num_obs_history,
-                                      self.env.num_actions,
+        actor_critic = ActorCritic(num_obs=self.env.num_obs,
+                                        num_privileged_obs=self.env.num_privileged_obs,
+                                        num_obs_history=self.env.num_obs_history,
+                                        num_history=self.env.num_history,
+                                        num_actions=self.env.num_actions,
+                                        use_forward=self.ppo_cfg.use_forward,
                                       **policy_cfg,
                                       ).to(self.device)
 
@@ -43,27 +45,8 @@ class Runner:
         if self.log_dir is not None:
             if not os.path.exists(self.log_dir):
                 os.makedirs(self.log_dir)
-        
-        if self.env.need_apply_force:
-            self.start_push = self.cfg.start_push   
-        else:
-            self.start_push = -1 
-
-        if self.start_push > -1:
-            self.env.set_need_force_to_apply(False)
-        self.env.reset()
-
 
         self.env.reset()
-
-    def set_push(self,it):
-        if self.start_push > -1:
-            if it > self.start_push:
-                self.env.set_need_force_to_apply(True)
-            else:
-                self.env.set_need_force_to_apply(False)
-        else:
-            self.env.set_need_force_to_apply(False)
 
     def learn(self, num_learning_iterations):
         mean_adaptation_module_loss = 0.0
@@ -83,7 +66,6 @@ class Runner:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         for it in range(self.current_learning_iteration, tot_iter):
-            self.set_push(it)
             start = time.time()
             # Rollout
             with torch.inference_mode():
@@ -93,7 +75,7 @@ class Runner:
                     obs_dict, rewards, dones, infos = ret
                     for k,v in obs_dict.items():
                         obs_dict[k] = v.to(self.device)
-                    self.alg.process_env_step(rewards, dones, infos)
+                    self.alg.process_env_step(rewards, dones, infos, obs_dict)
                     if self.log_dir is not None:
                         # Book keeping
                         if 'train/episode' in infos:
@@ -115,7 +97,7 @@ class Runner:
                 start = stop
                 self.alg.compute_returns(obs_dict['obs'], obs_dict['privileged_obs'],obs_dict['obs_history'])
 
-            mean_value_loss, mean_surrogate_loss,mean_entropy_loss = self.alg.update()
+            mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss = self.alg.update()
             stop = time.time()
             learn_time = stop - start
             if it % self.save_interval == 0:
@@ -184,7 +166,7 @@ class Runner:
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs['collection_time'] + locs['learn_time']))
 
         self.writer.add_scalar('Loss/value_function', locs['mean_value_loss'], locs['it'])
-        self.writer.add_scalar('Loss/Adaptation_module', locs['mean_adaptation_module_loss'], locs['it'])
+        self.writer.add_scalar('Loss/forward prediction', locs['mean_forward_loss'], locs['it'])
         self.writer.add_scalar('Loss/surrogate', locs['mean_surrogate_loss'], locs['it'])
         self.writer.add_scalar('Loss/entropy', locs['mean_entropy_loss'], locs['it'])
         self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, locs['it'])
@@ -212,7 +194,7 @@ class Runner:
                           f"""{'Computation:':>{pad}} {fps:.0f} steps/s (collection: {locs[
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
-                          f"""{'Adaptation loss:':>{pad}} {locs['mean_adaptation_module_loss']:.4f}\n"""
+                          f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
@@ -226,7 +208,7 @@ class Runner:
                           f"""{'Computation:':>{pad}} {fps:.0f} steps/s (collection: {locs[
                             'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                           f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
-                          f"""{'Adaptation loss:':>{pad}} {locs['mean_adaptation_module_loss']:.4f}\n"""
+                          f"""{'Forward prediction loss:':>{pad}} {locs['mean_forward_loss']:.4f}\n"""
                           f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                           f"""{'Policy entropy:':>{pad}} {locs['mean_entropy_loss']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n""")

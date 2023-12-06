@@ -32,6 +32,7 @@ class PPO:
         if self.use_forward:
             self.self_supervised_optimizer = torch.optim.Adam([
                 {'params':self.actor_critic.forward_model.parameters(), 'lr':self.cfg.adaptation_module_learning_rate, 'lr_name':'adaptation_module_learning_rate',},
+                {'params':self.actor_critic.vq.parameters(), 'lr':self.cfg.adaptation_module_learning_rate, 'lr_name':'adaptation_module_learning_rate',},
                 {'params':self.actor_critic.adaptation_module.parameters(), 'lr':self.cfg.adaptation_module_learning_rate, 'lr_name':"adaptation_module_learning_rate",  },
             ])
 
@@ -94,8 +95,11 @@ class PPO:
                        old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, env_bins_batch,next_obs_batch,dones_batch in generator:
             
             #! two-stage 
-            
-            latent,vq_loss, vq_loss_info = self.actor_critic.get_latent_and_loss(obs_history_batch)
+            if self.stop_gradient:
+                with torch.no_grad():
+                    latent, _ , _ = self.actor_critic.get_latent_and_loss(obs_history_batch)
+            else:
+                latent,vq_loss, vq_loss_info= self.actor_critic.get_latent_and_loss(obs_history_batch)
             self.actor_critic._update_with_latent(obs_batch,latent)
 
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
@@ -138,10 +142,16 @@ class PPO:
                 value_loss = torch.max(value_losses, value_losses_clipped).mean()
             else:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
-
-            loss = surrogate_loss + self.cfg.value_loss_coef * value_loss \
+            
+            if self.stop_gradient:
+                loss = surrogate_loss + self.cfg.value_loss_coef * value_loss \
+                - self.entropy_coef * entropy_batch.mean()
+            else:
+                loss = surrogate_loss + self.cfg.value_loss_coef * value_loss \
                 - self.entropy_coef * entropy_batch.mean() \
                 + vq_loss 
+                mean_cmt_loss += vq_loss_info['commit_loss']
+                mean_orth_loss += vq_loss_info['orthogonal_reg_loss']
 
             # Gradient step
             self.optimizer.zero_grad()
@@ -152,21 +162,23 @@ class PPO:
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy_loss += entropy_batch.mean().item()
-            mean_cmt_loss += vq_loss_info['commit_loss']
-            mean_orth_loss += vq_loss_info['orthogonal_reg_loss']
+            
 
             #! self-supervised learning
             if self.use_forward:
                 for _ in range(self.cfg.num_adaptation_module_substeps):
                     #! 如果 done == True, 那么 prediction loss 不进行计算
-                    node_latent = self.actor_critic.adaptation_module.forward(obs_history_batch)
-                    predicted_next_obs = self.actor_critic.forward_model.forward(obs_batch, actions_batch, node_latent)
+                    latent,vq_loss, vq_loss_info= self.actor_critic.get_latent_and_loss(obs_history_batch)
+                    predicted_next_obs = self.actor_critic.forward_model.forward(obs_batch, actions_batch, latent)
                     mask = torch.logical_not(dones_batch).squeeze()
-                    loss = F.mse_loss(predicted_next_obs[mask], next_obs_batch[mask])
+                    forward_loss = F.mse_loss(predicted_next_obs[mask], next_obs_batch[mask]) 
+                    loss = forward_loss + vq_loss 
                     self.self_supervised_optimizer.zero_grad()
                     loss.backward()
                     self.self_supervised_optimizer.step()
-                    mean_forward_loss += loss.item()
+                    mean_forward_loss += forward_loss.item()
+                    mean_cmt_loss += vq_loss_info['commit_loss']
+                    mean_orth_loss += vq_loss_info['orthogonal_reg_loss']
 
 
         num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches

@@ -44,11 +44,12 @@ class EstimatorNet(nn.Module):
         foot_height = self.foot_height_branch(output)
         contact = self.contact_branch(output)
         return vel, foot_height, contact,output
-    def loss_fn(self,obs_history, vel,foot_height,contact):
+    def loss_fn(self,obs_history, vel,foot_height,contact,dones):
+        mask = torch.logical_not(dones).squeeze()
         estimated_vel, estimated_foot_height, estimated_contact,_ = self.forward(obs_history) 
-        vel_loss = F.mse_loss(estimated_vel, vel,reduction='none').mean(-1)
-        foot_height_loss = F.mse_loss(estimated_foot_height, foot_height,reduction='none').mean(-1)
-        contact_loss = F.binary_cross_entropy(estimated_contact, contact,reduction='none').mean(-1)
+        vel_loss = F.mse_loss(estimated_vel[mask], vel[mask])
+        foot_height_loss = F.mse_loss(estimated_foot_height[mask], foot_height[mask])
+        contact_loss = F.binary_cross_entropy(estimated_contact[mask], contact[mask])
         loss = vel_loss + foot_height_loss + contact_loss 
         return {
             'loss': loss,

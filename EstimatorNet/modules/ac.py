@@ -105,18 +105,13 @@ class ActorCritic(nn.Module):
             num_obs=num_obs,
             num_privileged_obs=num_privileged_obs,
             num_obs_history=num_obs_history,
-            num_latent=num_latent +  3 + 4 + 4  , #! 
+            num_latent=num_latent +  3 + 4 + 4 , #! 
             num_actions=num_actions,
             activation=activation,
             actor_hidden_dims=actor_hidden_dims,
         )
-        self.distribution = MultivariateGaussianDiagonalCovariance(
-            dim = num_actions,
-            init_std=init_noise_std,
-        )
-        
+        self.distribution = None
         # Critic Module
-
         self.critic = BaseCritic(
             num_obs=num_obs,
             num_privileged_obs=num_privileged_obs,
@@ -126,6 +121,10 @@ class ActorCritic(nn.Module):
             activation=activation,
             actor_hidden_dims=critic_hidden_dims,
         )
+        # Action noise
+        self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
+        self.distribution = None
+        # disable args validation for speedup
         Normal.set_default_validate_args = False
 
         self.estimator.apply(init_orhtogonal)
@@ -150,19 +149,27 @@ class ActorCritic(nn.Module):
         vel, foot_height, contact , latent = self.estimator.forward(obs_history)
         latent = torch.cat([vel,foot_height,contact,latent],dim = 1)
         action_mean = self.actor.forward(obs, latent)
-        self.distribution.update(action_mean)
+        self.distribution = Normal(action_mean, action_mean * 0. + self.std)
         return self.distribution.sample()
 
 
     def get_actions_log_prob(self,actions):
-        return self.distribution.get_actions_log_prob(actions)
+        return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self,obs_dict):
-        vel, foot_height, contact = self.estimator.forward(obs_dict['obs_history'])
-        latent = torch.cat([vel, foot_height, contact],dim = 1)
+        vel, foot_height, contact,latent = self.estimator.forward(obs_dict['obs_history'])
+        latent = torch.cat([vel, foot_height, contact,latent],dim = 1)
         return self.actor.forward(obs_dict['obs'], latent)
 
     def evaluate(self,obs,privileged_observations):
         value = self.critic.forward(obs, privileged_observations)
         return value 
-        
+    
+    # region 
+    # ------------ Training ------------ 
+
+    def _update_with_latent(self,obs, latent):
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
+
+    # endregion

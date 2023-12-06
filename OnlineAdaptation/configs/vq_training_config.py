@@ -32,6 +32,9 @@ class EnvCfg(BasicCfg):
         priv_observe_com_displacement = False #! 3
         priv_observe_motor_strength = False #! 12
         priv_observe_force_apply = True #! 1 + 3, body_index, Force
+
+        # ---------- Utils ----------
+        need_other_obs_state = False
         
     class terrain(BasicCfg.terrain):   
         mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
@@ -119,8 +122,6 @@ class EnvCfg(BasicCfg):
         terrain_width = 8.
         num_rows= 10 # number of terrain rows (levels)
         num_cols = 20 # number of terrain cols (types)
-
-
     class commands(BasicCfg.commands):
 
         command_curriculum = True
@@ -166,7 +167,7 @@ class EnvCfg(BasicCfg):
 
         soft_dof_vel_limit = 1.0
         soft_torque_limit = 0.9
-        soft_dof_pos_limit = 1.0
+        soft_dof_pos_limit = 0.9 #! 阻止出现在 joint limit 的情况
         base_height_target = 0.25
         max_contact_force = 100. 
 
@@ -185,7 +186,8 @@ class EnvCfg(BasicCfg):
         dof_acc = -5e-7 # -2.5e-7
         collision = -1. # -1.0
         body_height_v2 = -1.0
-        action_rate = -0.01# -0.01 # -0.01 #TODO: 暂时删除action震荡的penalty
+        action_rate = -0.01#
+        hip_rotate = -0.01 
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
@@ -212,10 +214,12 @@ class EnvCfg(BasicCfg):
         resampling_time = 10.
         # body_index = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,-1] # 0-17, 18 bodies
         # body_index = [0,2,3,4,6,7,8,10,11,12,14,15,16,-1] # 0-17, 18 bodies
-        body_index = [-1,0,2,6,10,14, 3,7,11,15] # 先只做 base 和 thigh 的 force apply
+        # body_index = [-1,0, 2,6,10,14, 3,7,11,15] # 先只做 base, thigh, calf 的 force apply, 不做 hip 和 foot
+        body_index = [-1,0, 2,6,10,14, 3,7,11,15, 4,8,12,16] # 先只做 base, thigh, calf 的 force apply, 不做 hip 和 foot
         max_force = 50.0
         min_force = 10.0
         max_z_force = 10.0 
+
 
 class RunnerCfg(BasicRunnerCfg):
 
@@ -238,10 +242,10 @@ class RunnerCfg(BasicRunnerCfg):
         selective_adaptation_module_loss = False
 
         #! use forward model to perform the unsupervised learning
-        num_adaptation_module_substeps = 4
+        num_adaptation_module_substeps = 1
         use_graph = False
-        use_forward = False 
-        stop_gradient = False
+        use_forward = True 
+        stop_gradient = True
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
@@ -252,15 +256,15 @@ class RunnerCfg(BasicRunnerCfg):
 
         #! VQ 用的
         commitment_weight = 1.0
-        orthogonal_reg_weight = 0.1
-        codebook_size = 256 
-        n_heads = 4
+        orthogonal_reg_weight = 0.0 # 0.01
+        codebook_size = 32 #256 
+        n_heads = 4 # 1,2,4,8,16 
         ema_update=True
-        decay=0.8
+        decay=0.9
         eps= 1e-5
         elephant_actor = False
     class runner:
-        run_name = 'Baseline_Elephant_no_stage'
+        run_name = 'STG_4_head'
         experiment_name = 'VQ'
         
         num_steps_per_env = 24 # per iteration
@@ -273,10 +277,11 @@ class RunnerCfg(BasicRunnerCfg):
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt 
         start_push = 2000
-        use_training_stage = False 
+        use_training_stage = True 
         training_stage = [
-            (-1,[-1],0.8),
-            (2000,[-1,0,2,6,10,14], 0.4),
-            (5000,[-1,0,2,6,10,14, 3,7,11,15],0)
+            (-1,[-1],0.9),
+            (2000,[-1,0,2,6,10,14], 0.6),
+            (4000,[-1,0, 2,6,10,14, 3,7,11,15],0.3),
+            (5000,[-1,0, 2,6,10,14, 3,7,11,15, 4,8,12,16],0.0)
         ]
 

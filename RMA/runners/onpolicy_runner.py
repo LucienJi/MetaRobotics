@@ -44,7 +44,22 @@ class Runner:
             if not os.path.exists(self.log_dir):
                 os.makedirs(self.log_dir)
 
+        if self.env.need_apply_force:
+            self.start_push = self.cfg.start_push   
+        else:
+            self.start_push = -1 
+        if self.start_push > -1:
+            self.env.set_need_force_to_apply(False)
         self.env.reset()
+
+    def set_push(self,it):
+        if self.start_push > -1:
+            if it > self.start_push:
+                self.env.set_need_force_to_apply(True)
+            else:
+                self.env.set_need_force_to_apply(False)
+        else:
+            self.env.set_need_force_to_apply(False)
 
     def learn(self, num_learning_iterations):
         self.save_cfg()
@@ -63,11 +78,13 @@ class Runner:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         for it in range(self.current_learning_iteration, tot_iter):
+            #! 先通常训练, 有助于平稳步态
+            self.set_push(it)
             start = time.time()
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
-                    actions = self.alg.act_student(obs_dict["obs"],obs_dict["privileged_obs"], obs_dict["obs_history"])
+                    actions = self.alg.act(obs_dict["obs"],obs_dict["privileged_obs"], obs_dict["obs_history"])
                     ret = self.env.step(actions)
                     obs_dict, rewards, dones, infos = ret
                     for k,v in obs_dict.items():

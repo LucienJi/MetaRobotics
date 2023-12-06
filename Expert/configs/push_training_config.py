@@ -120,7 +120,6 @@ class EnvCfg(BasicCfg):
         num_rows= 10 # number of terrain rows (levels)
         num_cols = 20 # number of terrain cols (types)
 
-
     class commands(BasicCfg.commands):
 
         command_curriculum = True
@@ -138,8 +137,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_y',
                 'init_low':-0.3,
                 'init_high':0.3,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             },
@@ -147,8 +146,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_yaw',
                 'init_low':-0.2,
                 'init_high':0.2,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             }
@@ -166,7 +165,7 @@ class EnvCfg(BasicCfg):
 
         soft_dof_vel_limit = 1.0
         soft_torque_limit = 0.9
-        soft_dof_pos_limit = 1.0
+        soft_dof_pos_limit = 0.9 #! 阻止出现在 joint limit 的情况
         base_height_target = 0.25
         max_contact_force = 100. 
 
@@ -184,7 +183,9 @@ class EnvCfg(BasicCfg):
         dof_vel = -0.
         dof_acc = -5e-7 # -2.5e-7
         collision = -1. # -1.0
-        action_rate = -0.01# -0.01 # -0.01 #TODO: 暂时删除action震荡的penalty
+        body_height_v2 = -1.0
+        action_rate = -0.01#
+        hip_rotate = -0.01 
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
@@ -201,7 +202,7 @@ class EnvCfg(BasicCfg):
         motor_strength_range = [0.9, 1.1]
         randomize_lag_timesteps = False
         lag_timesteps = 6
-        push_robots = True
+        push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
 
@@ -211,7 +212,7 @@ class EnvCfg(BasicCfg):
         resampling_time = 10.
         # body_index = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,-1] # 0-17, 18 bodies
         # body_index = [0,2,3,4,6,7,8,10,11,12,14,15,16,-1] # 0-17, 18 bodies
-        body_index = [-1,0, 2,6,10,14, 3,7,11,15] # 先只做 base, thigh, calf 的 force apply, 不做 hip 和 foot
+        body_index = [-1,0, 2,6,10,14, 3,7,11,15, 4,8,12,16] # 先只做 base, thigh, calf 的 force apply, 不做 hip 和 foot
         max_force = 50.0
         min_force = 10.0
         max_z_force = 10.0 
@@ -228,29 +229,22 @@ class RunnerCfg(BasicRunnerCfg):
         num_mini_batches = 4  # mini batch size = num_envs*nsteps / nminibatches
         learning_rate = 5.e-4# 5.e-4
         adaptation_module_learning_rate = 1.e-3
-        
+        num_adaptation_module_substeps = 1
         schedule = 'adaptive'  # could be adaptive, fixed
         gamma = 0.99
         lam = 0.95
         desired_kl = 0.01
         max_grad_norm = 1.
         selective_adaptation_module_loss = False
-
-        #! use forward model to perform the unsupervised learning
-        num_adaptation_module_substeps = 4
-        use_graph = True
-        use_forward = False 
-        stop_gradient = False
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         adaptation_module_branch_hidden_dims = [256, 128]
-        num_latent = 16 
         activation = 'lrelu'
     class runner:
-        run_name = 'NoForward'
-        experiment_name = 'Graph'
+        run_name = 'PushBaseline'
+        experiment_name = 'Expert'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 5000 # number of policy updates
@@ -261,4 +255,5 @@ class RunnerCfg(BasicRunnerCfg):
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt 
+        start_push = 2000
 

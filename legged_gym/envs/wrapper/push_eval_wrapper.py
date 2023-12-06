@@ -20,10 +20,20 @@ class PushConfig:
         assert len(self.body_index_list) > 0 and  len(self.force_list) > 0
         self._force = self.force_list[0]
         self._body_index = self.body_index_list[0] 
+
+        self._config_info = {
+            'config:id':self.id,
+            'config:body_index_list':self.body_index_list,
+            'config:change_interval':self.change_interval,
+            'config:force_list':self.force_list,
+        }
     
     def _change(self):
         self._force = np.random.choice(self.force_list)
         self._body_index = np.random.choice(self.body_index_list) 
+    
+    def get_config_info(self):
+        return self._config_info
 
 class EvalWrapper():
     def __init__(self, env:LeggedRobot, env_cfg, cmd_vel = [0.5, 0.0,0.0],
@@ -57,10 +67,8 @@ class EvalWrapper():
     
     
     def step(self, action):
-        print("#####################")
         for config in self.eval_config:
             self.env.set_force_apply(config._body_index, config._force, z_force_norm = 0)
-            print("Check: ", config._body_index, config._force)
             if config.change_interval > 0 and (self.step_ct% config.change_interval == 0):
                 config._change()
                 
@@ -89,6 +97,8 @@ class EvalWrapper():
         first_done = np.argmax(self.eval_res['done'], axis = 1)
         self.eval_res['first_done'] = first_done
         self.eval_res['Fall'] = first_done < 1000
+        for i in range(len(self.eval_config)):
+            self.eval_res.update(self.eval_config[i].get_config_info())
         return self.eval_res
         # if os.path.exists(eval_path) == False:
         #     os.makedirs(eval_path)

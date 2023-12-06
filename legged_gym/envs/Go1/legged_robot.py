@@ -1194,13 +1194,18 @@ class LeggedRobot(BaseTask):
 
     ## ------ Interface with gym --------
     def set_force_apply(self, index, force_norm,z_force_norm = 0.0):
+        """
+        目前简化 apply force, 只 apply 在 x, y 方向上
+        """
         if index == -1 :
             # index = -1, 不 apply force 
             return
         x_vel = self.base_lin_vel[:,0]
         y_vel = self.base_ang_vel[:,1]
         vel_norm = torch.sqrt(x_vel**2 + y_vel**2)
-        f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
+        # f_x,f_y = -force_norm* (x_vel+ 1e-6) / (vel_norm + 1e-6), -force_norm* (y_vel+ 1e-6) / (vel_norm + 1e-6)
+        f_x = -force_norm* (x_vel+ 1e-6) / (torch.abs(x_vel) + 1e-6)
+        f_y = torch.zeros_like(f_x)
         f_z = -z_force_norm
         self.force_to_apply[:,index,0] = f_x 
         self.force_to_apply[:,index,1] = f_y
@@ -1248,13 +1253,17 @@ class LeggedRobot(BaseTask):
             self._switch_valid_push_env(env_ids)
 
     def _set_force_to_apply(self):
+        """
+        增加 x, z 方向的 force, 假如有 y 方向的速度,
+        """
         self.force_to_apply[:] = 0.0
         cmd_x_vel = self.commands[:,0]
         cmd_y_vel = self.commands[:,1]
         vel_norm = torch.sqrt(cmd_x_vel**2 + cmd_y_vel**2)
-        f_x,f_y = -self.xy_force_norm * (cmd_x_vel+ 1e-6) / (vel_norm + 1e-4), -self.xy_force_norm * (cmd_y_vel+ 1e-6) / (vel_norm + 1e-4)
+        f_x = -self.xy_force_norm * (cmd_x_vel+ 1e-6) / (vel_norm + 1e-4)
+        # f_y = -self.xy_force_norm * (cmd_y_vel+ 1e-6) / (vel_norm + 1e-4)
+        f_y = torch.zeros_like(f_x)
         f_z = - torch.min(self.z_force_norm, f_x * 0.5)
-        f_z = - torch.min(f_z, f_y * 0.5)
 
         #! -1 是
         

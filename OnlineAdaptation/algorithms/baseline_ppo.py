@@ -1,11 +1,11 @@
-from Expert.modules.ac import ActorCritic
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from Expert.configs.training_config import RunnerCfg
-from Expert.buffers.storage import RolloutStorage
+from OnlineAdaptation.configs.training_config import RunnerCfg
+from OnlineAdaptation.buffers.storage import RolloutStorage
+from OnlineAdaptation.modules.ac import ActorCritic
 
 class PPO:
     def __init__(self, actor_critic:ActorCritic,cfg:RunnerCfg.algorithm, device='cpu'):
@@ -18,10 +18,24 @@ class PPO:
         self.storage = None  # initialized later
         #! 这个是可以优化 expert 的优化器
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate)
+        #! 自监督优化 
+        
+        ## Supervised learning for adaptation module
+        # self.adaptation_module_optimizer = optim.Adam(self.actor_critic.adaptation_module.parameters(),
+        #                                               lr=self.cfg.adaptation_module_learning_rate)
+
         self.transition = RolloutStorage.Transition()
 
         self.learning_rate = self.cfg.learning_rate
         self.entropy_coef = self.cfg.entropy_coef 
+        self.use_forward = self.cfg.use_forward & self.actor_critic.use_forward
+        if self.use_forward:
+            self.self_supervised_optimizer = torch.optim.Adam([
+                {'params':self.actor_critic.forward_model.parameters(), 'lr':self.cfg.adaptation_module_learning_rate, 'lr_name':'adaptation_module_learning_rate',},
+                {'params':self.actor_critic.adaptation_module.parameters(), 'lr':self.cfg.adaptation_module_learning_rate, 'lr_name':"adaptation_module_learning_rate",  },
+            ])
+
+        self.stop_gradient = self.cfg.stop_gradient 
 
     def init_storage(self, num_envs, num_transitions_per_env, actor_obs_shape, privileged_obs_shape, obs_history_shape,
                      action_shape):
@@ -36,7 +50,7 @@ class PPO:
 
     def act(self, obs, privileged_obs, obs_history):
         # Compute the actions and values
-        self.transition.actions = self.actor_critic.act(obs,obs_history).detach()
+        self.transition.actions = self.actor_critic.act(obs,obs_history,privileged_obs = privileged_obs).detach()
         self.transition.values = self.actor_critic.evaluate(obs,obs_history, privileged_obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
@@ -48,7 +62,7 @@ class PPO:
         self.transition.observation_histories = obs_history
         return self.transition.actions
 
-    def process_env_step(self, rewards, dones, infos):
+    def process_env_step(self, rewards, dones, infos, obs_dict = None):
         self.transition.rewards = rewards.clone()
         self.transition.dones = dones
         self.transition.env_bins = infos["env_bins"]
@@ -56,7 +70,8 @@ class PPO:
         if 'time_outs' in infos:
             self.transition.rewards += self.cfg.gamma * torch.squeeze(
                 self.transition.values * infos['time_outs'].unsqueeze(1).to(self.device), 1)
-
+        if obs_dict is not None:
+            self.transition.next_observations = obs_dict['obs']
         # Record the transition
         self.storage.add_transitions(self.transition)
         self.transition.clear()
@@ -68,14 +83,22 @@ class PPO:
     def update(self):
         mean_value_loss = 0
         mean_entropy_loss = 0
-        mean_surrogate_loss = 0        
+        mean_surrogate_loss = 0   
+        mean_forward_loss = 0     
         generator = self.storage.mini_batch_generator(self.cfg.num_mini_batches, self.cfg.num_learning_epochs)
         
         self.actor_critic.train()
         for obs_batch, critic_observations_batch, privileged_obs_batch, obs_history_batch, actions_batch, target_values_batch, advantages_batch, returns_batch, \
-                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, env_bins_batch in generator:
+                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, env_bins_batch,next_obs_batch,dones_batch in generator:
+            
+            #! two-stage 
+            if self.stop_gradient:
+                with torch.no_grad():
+                    latent = self.actor_critic.get_latent(obs_history_batch).detach()
+            else:
+                latent = self.actor_critic.get_latent(obs_history_batch)
+            self.actor_critic._update_with_latent(obs_batch,latent)
 
-            self.actor_critic.act(obs_batch,obs_history_batch)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
             value_batch = self.actor_critic.evaluate(obs_batch,obs_history_batch, privileged_obs_batch)
             mu_batch = self.actor_critic.action_mean
@@ -129,12 +152,27 @@ class PPO:
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy_loss += entropy_batch.mean().item()
 
+            #! self-supervised learning
+            if self.use_forward:
+                for _ in range(self.cfg.num_adaptation_module_substeps):
+                    #! 如果 done == True, 那么 prediction loss 不进行计算
+                    node_latent = self.actor_critic.adaptation_module.forward(obs_history_batch)
+                    predicted_next_obs = self.actor_critic.forward_model.forward(obs_batch, actions_batch, node_latent)
+                    mask = torch.logical_not(dones_batch).squeeze()
+                    loss = F.mse_loss(predicted_next_obs[mask], next_obs_batch[mask])
+                    self.self_supervised_optimizer.zero_grad()
+                    loss.backward()
+                    self.self_supervised_optimizer.step()
+                    mean_forward_loss += loss.item()
+
+
         num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
         mean_entropy_loss /= num_updates
+        mean_forward_loss /= (num_updates * self.cfg.num_adaptation_module_substeps)
       
         self.storage.clear()
         self.actor_critic.eval()
 
-        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss
+        return mean_value_loss, mean_surrogate_loss,mean_entropy_loss,mean_forward_loss

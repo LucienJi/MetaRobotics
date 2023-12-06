@@ -17,6 +17,7 @@ class ActorCritic(nn.Module):
                  init_noise_std = 1.0):
         super().__init__()
         self.num_obs_history = num_obs_history
+        self.num_obs = num_obs
         self.num_privileged_obs = num_privileged_obs
         activation = get_activation(activation)
 
@@ -45,7 +46,7 @@ class ActorCritic(nn.Module):
 
 
         # Value function
-        mlp_input_dim_c = self.num_privileged_obs + self.num_obs_history
+        mlp_input_dim_c = self.num_privileged_obs + self.num_obs
         critic_layers = []
         self.critic_encoder = nn.Sequential(
             nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]),
@@ -111,7 +112,7 @@ class ActorCritic(nn.Module):
 
     def evaluate(self, obs, observation_history, privileged_observations, **kwargs):
         bz = observation_history.shape[0]
-        value = self.critic_body(torch.cat((observation_history.reshape(bz,-1), privileged_observations), dim=-1))
+        value = self.critic_body(torch.cat((obs, privileged_observations), dim=-1))
         return value
 
         

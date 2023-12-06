@@ -2,6 +2,16 @@ import torch.nn as nn
 import torch
 from utils.torch_utils import  get_activation,check_cnnoutput
 
+def mlp(input_dim, out_dim, hidden_sizes, activations):
+    layers = []
+    prev_h = input_dim
+    for h in hidden_sizes:
+        layers.append(nn.Linear(prev_h, h))
+        layers.append(activations)
+        prev_h = h
+    layers.append(nn.Linear(prev_h, out_dim))
+    return nn.Sequential(*layers)
+
 class MLPExpertEncoder(nn.Module):
     def __init__(self, 
                  num_obs,

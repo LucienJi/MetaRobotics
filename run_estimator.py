@@ -2,15 +2,13 @@ import os
 from datetime import datetime
 from legged_gym.envs.Go1.legged_robot import LeggedRobot
 from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
-from visualization.play_helper import play_policy
 from legged_gym.utils.helpers import class_to_dict,update_class_from_dict,parse_sim_params,get_load_path,update_cfg_from_args,get_args
 from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
-
-from Expert.configs.push_training_config import EnvCfg,RunnerCfg
-from Expert.runners.onpolicy_runner import Runner
-from Expert.modules.ac import ActorCritic
+from visualization.play_helper import play_policy
+from EstimatorNet.configs.push_training_config import EnvCfg,RunnerCfg
+from EstimatorNet.runners.onpolicy_runner import Runner
+from EstimatorNet.modules.ac import ActorCritic
 import torch 
-
 
 def launch(args):
     env_cfg = EnvCfg()

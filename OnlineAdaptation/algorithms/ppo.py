@@ -50,7 +50,7 @@ class PPO:
 
     def act(self, obs, privileged_obs, obs_history):
         # Compute the actions and values
-        self.transition.actions = self.actor_critic.act(obs,obs_history).detach()
+        self.transition.actions = self.actor_critic.act(obs,obs_history,privileged_obs = privileged_obs).detach()
         self.transition.values = self.actor_critic.evaluate(obs,obs_history, privileged_obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()

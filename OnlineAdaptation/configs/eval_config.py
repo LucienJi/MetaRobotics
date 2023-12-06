@@ -34,7 +34,7 @@ class EnvCfg(BasicCfg):
         priv_observe_force_apply = True #! 1 + 3, body_index, Force
         
     class terrain(BasicCfg.terrain):   
-        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
+        mesh_type = 'plane' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.1 # [m]
         vertical_scale = 0.005 # [m]
         border_size = 25 # [m]
@@ -60,11 +60,11 @@ class EnvCfg(BasicCfg):
         
         terrain_kwargs = {
             "plane_terrain":{
-                "weight": 1.0,
+                "weight": 10.0,
                 "height" : 0.0
             },
             'random_uniform_terrain': {
-                "weight": 10.0,
+                "weight": 1.0,
                 "min_height" : -0.03,
                 "max_height" : 0.03,
                 "step" : 0.005,
@@ -138,8 +138,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_y',
                 'init_low':-0.3,
                 'init_high':0.3,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             },
@@ -147,8 +147,8 @@ class EnvCfg(BasicCfg):
                 'name':'vel_yaw',
                 'init_low':-0.2,
                 'init_high':0.2,
-                'limit_low':-0.5,
-                'limit_high':0.5,
+                'limit_low':-0.3,
+                'limit_high':0.3,
                 'local_range':0.5,
                 'num_bins':3,
             }
@@ -166,7 +166,7 @@ class EnvCfg(BasicCfg):
 
         soft_dof_vel_limit = 1.0
         soft_torque_limit = 0.9
-        soft_dof_pos_limit = 1.0
+        soft_dof_pos_limit = 0.9 #! 阻止出现在 joint limit 的情况
         base_height_target = 0.25
         max_contact_force = 100. 
 
@@ -184,16 +184,18 @@ class EnvCfg(BasicCfg):
         dof_vel = -0.
         dof_acc = -5e-7 # -2.5e-7
         collision = -1. # -1.0
-        action_rate = -0.01# -0.01 # -0.01 #TODO: 暂时删除action震荡的penalty
+        body_height_v2 = -1.0
+        action_rate = -0.01#
+        hip_rotate = -0.01 
 
     class domain_rand(BasicCfg.domain_rand):
         rand_interval_s = 10
-        randomize_rigids_after_start = True
-        randomize_friction = True
+        randomize_rigids_after_start = False
+        randomize_friction = False
         friction_range = [0.3, 1.25] # increase range
-        randomize_restitution = True
+        randomize_restitution = False
         restitution_range = [0.0, 0.4]
-        randomize_base_mass = True
+        randomize_base_mass = False
         added_mass_range = [-1.0, 1.0]
         randomize_com_displacement = False
         com_displacement_range = [-0.15, 0.15]
@@ -201,7 +203,7 @@ class EnvCfg(BasicCfg):
         motor_strength_range = [0.9, 1.1]
         randomize_lag_timesteps = False
         lag_timesteps = 6
-        push_robots = True
+        push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
 
@@ -216,49 +218,4 @@ class EnvCfg(BasicCfg):
         min_force = 10.0
         max_z_force = 10.0 
 
-class RunnerCfg(BasicRunnerCfg):
-
-    class algorithm:
-        # algorithmpass
-        value_loss_coef = 1.0
-        use_clipped_value_loss = True
-        clip_param = 0.2
-        entropy_coef = 0.01
-        num_learning_epochs = 5
-        num_mini_batches = 4  # mini batch size = num_envs*nsteps / nminibatches
-        learning_rate = 5.e-4# 5.e-4
-        adaptation_module_learning_rate = 1.e-3
-        
-        schedule = 'adaptive'  # could be adaptive, fixed
-        gamma = 0.99
-        lam = 0.95
-        desired_kl = 0.01
-        max_grad_norm = 1.
-        selective_adaptation_module_loss = False
-
-        #! use forward model to perform the unsupervised learning
-        num_adaptation_module_substeps = 4
-        use_graph = True
-        use_forward = False 
-        stop_gradient = False
-    class policy:
-        init_noise_std = 1.0
-        actor_hidden_dims = [512, 256, 128]
-        critic_hidden_dims = [512, 256, 128]
-        adaptation_module_branch_hidden_dims = [256, 128]
-        num_latent = 16 
-        activation = 'lrelu'
-    class runner:
-        run_name = 'NoForward'
-        experiment_name = 'Graph'
-        
-        num_steps_per_env = 24 # per iteration
-        max_iterations = 5000 # number of policy updates
-        # logging
-        save_interval = 1000 # check for potential saves every this many iterations
-        # load and resume
-        resume = False
-        load_run = -1 # -1 = last run
-        checkpoint = -1 # -1 = last saved model
-        resume_path = None # updated from load_run and chkpt 
 

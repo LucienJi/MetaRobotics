@@ -37,6 +37,12 @@ def uniform_init(*shape):
     t = torch.empty(shape)
     nn.init.kaiming_uniform_(t)
     return t
+
+def orthogonal_init(*shape):
+    t = torch.empty(shape)
+    nn.init.orthogonal_(t)
+    return t
+
 def pack_one(t, pattern):
     return pack([t], pattern)
 
@@ -285,7 +291,7 @@ class SimpleCodeBook(nn.Module):
         super().__init__()
         self.codebook_size = codebook_size
         self.num_codebooks = num_codebooks
-        init_fn = uniform_init # 可能可以尝试有 pretrain 的初始化 
+        init_fn = orthogonal_init # 可能可以尝试有 pretrain 的初始化 
         self.sample_method = simple_sample
         embed = init_fn(num_codebooks,codebook_size, dim)
         self.sample_codebook_temp = 1.0

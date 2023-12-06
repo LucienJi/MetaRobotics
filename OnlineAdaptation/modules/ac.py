@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 from utils.torch_utils import  get_activation,init_orhtogonal,SquashedGaussian
-from .adaptation_module import body_index,hip_index,thigh_index,calf_index,edge_index,GraphEncoder,mlp , MLPHistoryEncoder
+from .adaptation_module import body_index,hip_index,thigh_index,calf_index,edge_index,GraphEncoder,mlp,MLPHistoryEncoder,MLPExpertEncoder
 from torch_geometric.nn import ResGatedGraphConv, GatedGraphConv
 from .forward_model import GraphForward,MLPForward
 # from .vq_torch.vq_quantize import VectorQuantize
@@ -53,6 +53,8 @@ class VQActorCritic(nn.Module):
             nn.Linear(input_size, dim * 2),
             act_fn,
             nn.Linear(dim * 2, dim),
+            act_fn,
+            nn.Linear(dim , dim),
         )
         self.vq = VectorQuantize(
             input_dim = dim,
@@ -81,6 +83,8 @@ class VQActorCritic(nn.Module):
             input_dim=critic_input_size,
             out_dim=1, hidden_sizes=critic_hidden_dims,activations=get_activation(activation)
         )
+        if self.use_forward:
+            self.forward_model = MLPForward(num_obs,num_latent,num_actions,activation)
         # Action noise
         self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
         self.distribution = None
@@ -175,7 +179,7 @@ class ActorCritic(nn.Module):
                  critic_hidden_dims = [512, 256, 128],
                  adaptation_module_branch_hidden_dims = [256, 128],
                  init_noise_std = 1.0,
-                 use_forward = True):
+                 use_forward = False):
         super().__init__()
         self.use_forward = use_forward
         # Adaptation module
@@ -249,7 +253,121 @@ class ActorCritic(nn.Module):
         self.distribution = Normal(mean, mean * 0. + self.std)
     # endregion
         
+
+class RMAActorCritic(nn.Module):
+    def __init__(self, 
+                 num_obs,
+                 num_privileged_obs,
+                 num_obs_history,
+                 num_history,
+                 num_latent,
+                 num_actions,
+                 activation = 'elu',
+                 actor_hidden_dims = [512, 256, 128],
+                 critic_hidden_dims = [512, 256, 128],
+                 adaptation_module_branch_hidden_dims = [256, 128],
+                 init_noise_std = 1.0):
+        super().__init__()
+        # Expert Module 
+        self.expert_encoder = MLPExpertEncoder(
+            num_obs=num_obs,
+            num_privileged_obs=num_privileged_obs,
+            num_latent=num_latent,
+            activation=activation,
+            adaptation_module_branch_hidden_dims=adaptation_module_branch_hidden_dims,
+        )
+
+        # Adaptation Module
+        self.adaptation_module = MLPHistoryEncoder(
+            num_obs = num_obs,
+            num_privileged_obs= num_privileged_obs,
+            num_obs_history=num_obs_history,
+            num_history=num_history,
+            num_latent=num_latent,
+            activation=activation,
+            adaptation_module_branch_hidden_dims=adaptation_module_branch_hidden_dims,
+        )
+        actor_input_size = num_obs + num_latent
+        actor_act = get_activation(activation)
+        self.actor = mlp(
+            input_dim=actor_input_size,
+            out_dim=num_actions,hidden_sizes=actor_hidden_dims,activations=actor_act
+        )
+
+        # Critic 
+        critic_input_size = num_obs + num_privileged_obs
+        self.critic = mlp(
+            input_dim=critic_input_size,
+            out_dim=1, hidden_sizes=critic_hidden_dims,activations=actor_act
+        )
+        # Action noise
+        self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
+        self.distribution = None
+        # disable args validation for speedup
+        Normal.set_default_validate_args = False
+        self.apply(init_orhtogonal)
+        print("RMABaseline")
+        print(self)
+    @property
+    def action_mean(self):
+        return self.distribution.mean
+
+    @property
+    def action_std(self):
+        return self.distribution.stddev
+
+    @property
+    def entropy(self):
+        return self.distribution.entropy().sum(dim=-1)
+    def update_distribution(self, obs, observation_history):
+        observation_history = observation_history.reshape(observation_history.shape[0],-1)
+        latent= self.adaptation_module(observation_history)
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
     
+    def _expert_update_distribution(self, obs, privileged_obs):
+        latent = self.expert_encoder(obs, privileged_obs)
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
+
+    def act(self,obs, observation_history,privileged_obs= None,use_expert = False):
+        if use_expert:
+            self._expert_update_distribution(obs, privileged_obs)
+        else:
+            self.update_distribution(obs,observation_history)
+        return self.distribution.sample()
+
+    def get_actions_log_prob(self, actions):
+        return self.distribution.log_prob(actions).sum(dim=-1)
+
+    def act_inference(self, ob, policy_info={}):
+        self.update_distribution(ob["obs"], ob["obs_history"])
+        return self.distribution.mean
+
+    def evaluate(self, obs, obs_history, privileged_observations, **kwargs):
+        value = self.critic(torch.cat([obs, privileged_observations], dim=-1))
+        return value
+    
+    # region
+    #--------------------- Training ---------------------#
+    def get_expert_latent(self, obs,privileged_obs):
+        latent = self.expert_encoder(obs, privileged_obs)
+        return latent
+
+    def get_student_latent(self, observation_history):
+        observation_history = observation_history.reshape(observation_history.shape[0],-1)
+        latent = self.adaptation_module(observation_history)
+        return latent
+    
+    def _update_with_latent(self,obs, latent):
+        mean = self.actor(torch.cat([obs, latent], dim=-1))
+        self.distribution = Normal(mean, mean * 0. + self.std)
+    # endregion
+    
+
+# class EstimatorActorCritic(nn.Module):
+
+
 class GraphActor(nn.Module):
     def __init__(self, 
                  num_obs,

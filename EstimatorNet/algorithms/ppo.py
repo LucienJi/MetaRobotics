@@ -60,7 +60,7 @@ class PPO:
         self.transition.rewards = rewards.clone()
         self.transition.dones = dones
         self.transition.env_bins = infos["env_bins"]
-        self.transition.next_observations = next_obs
+        # self.transition.next_observations = next_obs
         # Bootstrapping on time outs
         if 'time_outs' in infos:
             self.transition.rewards += self.cfg.gamma * torch.squeeze(
@@ -147,14 +147,16 @@ class PPO:
             for epoch in range(self.cfg.num_adaptation_module_substeps):
                 
                 self.estimator_optimizer.zero_grad()
-                estimator_loss_dict = self.actor_critic.estimator.loss_fn(obs_history_batch, base_vel_batch, foot_height_batch, contact_batch)
-                vae_loss = torch.mean(estimator_loss_dict['loss'])
-                vae_loss.backward()
+                estimator_loss_dict = self.actor_critic.estimator.loss_fn(obs_history_batch, 
+                                                                          base_vel_batch, foot_height_batch, contact_batch,
+                                                                          dones_batch)
+                estimator_loss = estimator_loss_dict['loss']
+                estimator_loss.backward()
                 self.estimator_optimizer.step()
                 with torch.no_grad():
-                    vel_loss = torch.mean(estimator_loss_dict['vel_loss'])
-                    foot_height_loss = torch.mean(estimator_loss_dict['foot_height_loss'])
-                    contact_loss = torch.mean(estimator_loss_dict['contact_loss']) 
+                    vel_loss = estimator_loss_dict['vel_loss']
+                    foot_height_loss = estimator_loss_dict['foot_height_loss']
+                    contact_loss = estimator_loss_dict['contact_loss']
                 mean_foot_height_loss += foot_height_loss.item()
                 mean_vel_loss += vel_loss.item()
                 mean_contact_loss += contact_loss.item()
