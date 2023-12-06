@@ -252,8 +252,8 @@ class RunnerCfg(BasicRunnerCfg):
         estimator_hidden_dims = [512, 256, 128]
 
         num_history = 5
-        num_latent = 16 
-        activation = 'elu'
+        num_latent = 128
+        activation = 'lrelu'
     class runner:
         run_name = 'PushBaseline'
         experiment_name = 'EstimatorNet'

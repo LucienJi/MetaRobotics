@@ -22,7 +22,7 @@ import numpy as np
 
 stationary_push_config = PushConfig(
     id = 0,
-    body_index_list = [0],
+    body_index_list = [4],
     change_interval = 100,
     force_list = [50],
 
@@ -44,7 +44,7 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval', base
     else:
         raise NotImplementedError
     
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 10)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -78,7 +78,7 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval', base
         obs_dict = env_pushed.obs_dict
         with torch.no_grad():
             actions = policy.act_inference(obs_dict)
-            env_pushed.step(actions.detach())
+            env_pushed.step(actions.detach(), draw=True)
     
     eval_res = env_pushed.get_result()
 
@@ -89,11 +89,11 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval', base
 
 if __name__ == '__main__':
     args = get_args()
-    path = "logs/EstimatorNet/Dec04_15-24-41_PushDebug/model_0.pt"
+    path = "logs/Expert/Dec04_22-35-46_PushBaseline/model_10000.pt"
     eval_stationary(args,path,
                     cmd_vel=[0.5,0.0,0.0],
                     name = 'DebugEval',
-                    baseline_name = 'e_net',
+                    baseline_name = 'expert',
                     eval_path = "logs/Eval")
     print("Done")
     exit()

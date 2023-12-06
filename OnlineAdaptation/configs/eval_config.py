@@ -217,5 +217,7 @@ class EnvCfg(BasicCfg):
         max_force = 50.0
         min_force = 10.0
         max_z_force = 10.0 
-
+    
+    class asset(BasicCfg.asset):
+        terminate_after_contacts_on = ["base","hip","thigh",]
 

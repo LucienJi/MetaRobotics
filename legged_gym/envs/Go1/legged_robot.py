@@ -1202,7 +1202,7 @@ class LeggedRobot(BaseTask):
             force = self.force_to_apply[i,index,:]
             # print("Check: ", force )
             force_norm = torch.sqrt(force[0]**2 + force[1]**2 + force[2]**2)
-            force = force / (force_norm + 1e-6) * 0.1 
+            force = force / (force_norm + 1e-6)
             color = gymapi.Vec3(1.0, 0.0, 0.0)
             p1_ = gymapi.Vec3(p1[0], p1[1], p1[2])
             p2_ = gymapi.Vec3(p1[0] + force[0], p1[1]+ force[1], p1[2]+ force[2])
