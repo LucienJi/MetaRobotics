@@ -2114,6 +2114,10 @@ class LeggedRobot(BaseTask):
             'done':self.reset_buf.cpu().numpy(),
             'tracking_error': tracking_error,
             'base_vel':self.base_lin_vel[:,0:3].cpu().numpy(),
+            "contact_force_z":  self.contact_forces[:, self.feet_indices, 2].cpu().numpy(),
+            "base_vel_roll": self.base_ang_vel[:,0].cpu().numpy(),
+            "base_vel_pitch": self.base_ang_vel[:,1].cpu().numpy(),
+            "base_vel_yaw": self.base_ang_vel[:,2].cpu().numpy(),
         }
         return res
     def get_eval_data(self):

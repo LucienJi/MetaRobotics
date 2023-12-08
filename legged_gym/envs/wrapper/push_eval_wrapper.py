@@ -47,6 +47,7 @@ class EvalWrapper():
         self.camera_vel = np.array([1., 1., 0.])
         self.camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
         self.env.set_eval()
+        self.cmd_vel = cmd_vel
         with torch.inference_mode():
             self.env.reset()
             self.env.reset_force_to_apply()
@@ -58,6 +59,16 @@ class EvalWrapper():
         self.step_ct = 0
         self.img_idx = 0
         self.eval_res = defaultdict(list)
+    
+    def reset(self):
+        self.env.set_eval()
+        with torch.inference_mode():
+            self.env.reset()
+            self.env.reset_force_to_apply()
+            self.env.set_command(self.cmd_vel)
+        self.obs_dict = self.env.get_observations()
+        self.eval_res = defaultdict(list)
+
 
     def set_eval_config(self, eval_config):
         if type(eval_config) is not list:
@@ -103,7 +114,9 @@ class EvalWrapper():
         self.eval_res['Fall'] = first_done < 1000
         for i in range(len(self.eval_config)):
             self.eval_res.update(self.eval_config[i].get_config_info())
-        return self.eval_res
+        res = self.eval_res.copy()
+        self.eval_res.clear()
+        return res
         # if os.path.exists(eval_path) == False:
         #     os.makedirs(eval_path)
         # eval_file_name = os.path.join(eval_path,eval_name)
