@@ -257,15 +257,15 @@ class RunnerCfg(BasicRunnerCfg):
         #! VQ 用的
         commitment_weight = 1.0
         orthogonal_reg_weight = 0.0 # 0.01
-        codebook_size = 32 #256 
+        codebook_size = 32 #32 
         n_heads = 4 # 1,2,4,8,16 
         ema_update=True
-        decay=0.9
+        decay=0.98
         eps= 1e-5
         elephant_actor = False
     class runner:
         run_name = 'STG_4_head'
-        experiment_name = 'VQ'
+        experiment_name = 'Raw_VQ'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 5000 # number of policy updates
