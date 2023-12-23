@@ -44,7 +44,7 @@ class LeggedRobot(BaseTask):
         self.eval= False
 
         #! Apply Force Task
-        if hasattr(self.cfg,'force_apply') and self.cfg.force_apply:
+        if hasattr(self.cfg,'force_apply') and self.cfg.force_apply.apply_force:
             self.need_apply_force = True 
             self.apply_force_interval = self.cfg.force_apply.push_interval
             valid_apply_force_body = self.cfg.force_apply.body_index 
