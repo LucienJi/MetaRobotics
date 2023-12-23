@@ -7,6 +7,7 @@ from legged_gym.utils.helpers import class_to_dict,update_class_from_dict,parse_
 from legged_gym.envs.wrapper.history_wrapper import HistoryWrapper
 from isaacgym import gymutil    
 from OnlineAdaptation.configs.vq_training_config import EnvCfg,RunnerCfg
+from OnlineAdaptation.configs.eval_vq_training_config import RunnerCfg as eval_RunnerCfg
 from OnlineAdaptation.runners.vq_onpolicy_runner import Runner
 from OnlineAdaptation.modules.ac import VQActorCritic
 import torch 
@@ -58,7 +59,8 @@ def get_train_args():
 
 def launch(args):
     env_cfg = EnvCfg()
-    train_cfg = RunnerCfg()
+    # train_cfg = RunnerCfg()
+    train_cfg = eval_RunnerCfg()
     _,train_cfg = update_cfg_from_args(None,train_cfg,args)
     
     #! modify args 

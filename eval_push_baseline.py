@@ -47,9 +47,9 @@ def get_eval_args():
         #! For baseline
         {"name": "--baseline_name",'type':str, "default": "expert"},
         {"name": "--task_type",'type':str, "default": "iid"},
-        {"name": "--model_path",'type':str, "default": "expert"},
+        {"name": "--model_path",'type':str, "default": "logs/Expert/Dec06_14-15-22_PushBaseline/model_10000.pt"},
         {"name": "--eval_name",'type':str, "default": "IID"},
-        {"name": "--cmd_vel",'type':float, "default": 0.5},
+        {"name": "--cmd_vel",'type':float, "default": 0.1},
         {"name": "--eval_path", 'type':str, "default": "logs/Eval/ood/3body/v10"},
     ]
     # parse arguments
@@ -114,8 +114,24 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval', base
     env = HistoryWrapper(env) 
     env_pushed = EvalWrapper(env, env_cfg, cmd_vel=cmd_vel,
                       record=False, move_camera=False,experiment_name='Eval')
+    
+    push_config = PushConfig(
+            id = 0,
+            body_index_list = [2],
+            change_interval = 100,
+            force_list = [10],)
+    push_config1 = PushConfig(
+            id = 0,
+            body_index_list = [6,11,],
+            change_interval = 100,
+            force_list = [10],)
+    push_config2 = PushConfig(
+            id = 0,
+            body_index_list = [11,],
+            change_interval = 100,
+            force_list = [10],)
     env_pushed.set_eval_config(
-        eval_config = [stationary_push_config]
+        eval_config = [push_config,push_config1,push_config2]
     )
     eval_name = train_cfg.runner.experiment_name + "-" + train_cfg.runner.run_name + "-stationary_push-" +baseline_name+ "-" + name
     policy_cfg  = class_to_dict(train_cfg.policy)
@@ -430,4 +446,13 @@ if __name__ == '__main__':
             baseline_name=args.baseline_name,
             eval_path = args.eval_path,
             force_list = args.force_list
+        )
+    else:
+        eval_stationary(
+            args,
+            path = args.model_path,
+            cmd_vel =[args.cmd_vel,0.0,0.0],
+            name=args.eval_name,
+            baseline_name=args.baseline_name,
+            eval_path = args.eval_path,
         )

@@ -1191,12 +1191,16 @@ class LeggedRobot(BaseTask):
     # endregion 
     
     # ------------- Utils ------------- 
-    # region Utils
+    # region Utils  
 
     ## ------ Interface with gym --------
     def draw_force(self,index):
-        if index == -1 :
-            return 
+        if type(index) is int and index == -1:
+            # index = -1, 不 apply force 
+            return
+        if type(index) is np.ndarray and index.any() == -1 :
+            # index = -1, 不 apply force 
+            return
         for i in range(self.num_envs):
             p1 = self.body_positions[i,index,:]
             force = self.force_to_apply[i,index,:]
@@ -1212,7 +1216,10 @@ class LeggedRobot(BaseTask):
         """
         目前简化 apply force, 只 apply 在 x, y 方向上
         """
-        if index == -1 :
+        if type(index) is int and index == -1:
+            # index = -1, 不 apply force 
+            return
+        if type(index) is np.ndarray and index.any() == -1 :
             # index = -1, 不 apply force 
             return
         #! 尝试让 command 从 base 到 global 
@@ -1226,6 +1233,8 @@ class LeggedRobot(BaseTask):
         f_x = -force_norm* (x_vel+ 1e-6) / (torch.abs(vel_norm) + 1e-6)
         f_y = -force_norm* (y_vel+ 1e-6) / (torch.abs(vel_norm) + 1e-6)
         f_z = -z_force_norm
+
+        # print("debug: ", index.shape)
         self.force_to_apply[:,index,0] = f_x 
         self.force_to_apply[:,index,1] = f_y
         self.force_to_apply[:,index,2] = f_z   

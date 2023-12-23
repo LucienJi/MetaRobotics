@@ -34,8 +34,9 @@ def get_eval_args():
 
         #! For VQ 
         {"name": "--n_heads", "type": int,"default": -1 },
-        {"name": "--use_forward","action": "store_true", "default": False },
-        {"name": "--stop_gradient", "action": "store_true", "default": False},
+        {"name": "--codebook_size", "type": int,"default": -1},
+        {"name": "--use_forward","type": int,"default": -1},
+        {"name": "--stop_gradient", "type": int,"default": -1},
 
         {"name": "--model_name",'type':str, "default": "VQ"},
         #! For baseline
@@ -67,9 +68,25 @@ def get_eval_args():
 
 stationary_push_config = PushConfig(
     id = 0,
+    body_index_list = [3],
+    change_interval = -1,
+    force_list = [30],
+
+)
+
+stationary_push_config2 = PushConfig(
+    id = 0,
+    body_index_list = [7],
+    change_interval = -1,
+    force_list = [30],
+
+)
+
+stationary_push_config3 = PushConfig(
+    id = 0,
     body_index_list = [4],
-    change_interval = 100,
-    force_list = [100],
+    change_interval = -1,
+    force_list = [30],
 
 )
 
@@ -96,7 +113,7 @@ def eval_stationary(args, path = None , cmd_vel =[0.5,0.0,0.0],name='Eval',
     env_pushed = EvalWrapper(env, env_cfg, cmd_vel=cmd_vel,
                       record=False, move_camera=False,experiment_name='Eval')
     env_pushed.set_eval_config(
-        eval_config = [stationary_push_config]
+        eval_config = [stationary_push_config,stationary_push_config2,stationary_push_config3]
     )
     eval_name = train_cfg.runner.experiment_name + "-" + train_cfg.runner.run_name + "-stationary_push-" + name
     policy_cfg  = class_to_dict(train_cfg.policy)
@@ -127,8 +144,20 @@ def eval_stationary_multiforce(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', 
                     force_list = [10,20,30,40,50,60,70,80,90,100]):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
+    #! modify args 
+    if args.n_heads != -1:
+        train_cfg.policy.n_heads = args.n_heads
+    if args.use_forward != -1:
+        train_cfg.algorithm.use_forward = True if args.use_forward == 1 else False
+    if args.stop_gradient != -1:
+        train_cfg.algorithm.stop_gradient = True if args.stop_gradient == 1 else False
+    if args.codebook_size != -1:
+        train_cfg.policy.codebook_size = args.codebook_size
+
+    train_cfg.runner.run_name = args.model_name
+
     
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 10)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -186,7 +215,16 @@ def eval_2Body_multiforce(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model
                     force_list = [50,100,150,200,250,300,350,400,450,500]):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
-
+    #! modify args 
+    if args.n_heads != -1:
+        train_cfg.policy.n_heads = args.n_heads
+    if args.use_forward != -1:
+        train_cfg.algorithm.use_forward = True if args.use_forward == 1 else False
+    if args.stop_gradient != -1:
+        train_cfg.algorithm.stop_gradient = True if args.stop_gradient == 1 else False
+    if args.codebook_size != -1:
+        train_cfg.policy.codebook_size = args.codebook_size
+    train_cfg.runner.run_name = args.model_name
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
@@ -254,7 +292,16 @@ def eval_3Body_multiforce(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model
                     force_list = [50,100,150,200,250,300,350,400,450,500]):
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
-
+    #! modify args 
+    if args.n_heads != -1:
+        train_cfg.policy.n_heads = args.n_heads
+    if args.use_forward != -1:
+        train_cfg.algorithm.use_forward = True if args.use_forward == 1 else False
+    if args.stop_gradient != -1:
+        train_cfg.algorithm.stop_gradient = True if args.stop_gradient == 1 else False
+    if args.codebook_size != -1:
+        train_cfg.policy.codebook_size = args.codebook_size
+    train_cfg.runner.run_name = args.model_name
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
@@ -328,7 +375,7 @@ def eval_sequential(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model_name 
     env_cfg = EnvCfg()
     train_cfg = RunnerCfg()
 
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
+    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
 
     env_cfg,_  = update_cfg_from_args(env_cfg,None,args)
     sim_params = {"sim":class_to_dict(env_cfg.sim)}
@@ -353,39 +400,48 @@ def eval_sequential(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model_name 
     policy.eval()
     env_pushed = EvalWrapper(env, env_cfg, cmd_vel=cmd_vel,
                       record=False, move_camera=False,experiment_name='Eval')
-    #! 单个 body 换腿 
+    
+    #region
     push_config_thigh = PushConfig(
             id = 0,
             body_index_list = [2,6,10,14],
-            change_interval = 50,
+            change_interval = 100,
             force_list = [force],
         )
     push_config_hip = PushConfig(
             id = 1,
             body_index_list = [3,7,11,15],
-            change_interval = 50,
+            change_interval = 100,
             force_list = [force],
         )
-    push_config_foot = PushConfig(
-            id = 2,
-            body_index_list = [4,8,12,16],
-            change_interval = 50,
-            force_list = [force],
-        )
-    list_push_config = [push_config_thigh,push_config_hip,push_config_foot]
+    # push_config_foot = PushConfig(
+    #         id = 2,
+    #         body_index_list = [4,8,12,16],
+    #         change_interval = 50,
+    #         force_list = [force],
+    #     )
+    list_push_config = [push_config_thigh,push_config_hip]
     for config in list_push_config:
         env_pushed.set_eval_config(
             eval_config = [config]
         )
         eval_name = train_cfg.runner.experiment_name + "-" + train_cfg.runner.run_name + f"-ChangeBody_{config.id}-" +model_name+ "-" + name + "-force-" + str(force)+ "N"
+        list_indices = []
+        list_latents = []
         for i in range(int(env.max_episode_length) + 10):
             obs_dict = env_pushed.obs_dict
             with torch.no_grad():
                 actions = policy.act_inference(obs_dict)
+                latents, indices, _ = policy.get_VQ_info(obs_dict)
                 env_pushed.step(actions.detach(), draw=False)
+                list_indices.append(indices.detach().cpu().numpy())
+                list_latents.append(latents.detach().cpu().numpy())
 
         eval_res = env_pushed.get_result()
-
+        list_indices = np.stack(list_indices,axis=1)
+        list_latents = np.stack(list_latents,axis=1)
+        eval_res['indices'] = list_indices
+        eval_res['latents'] = list_latents # (num_envs, num_steps, num_latents)
         # tmp_eval_path = os.path.join(eval_path,str(force)+'N')
         tmp_eval_path = eval_path
         if os.path.exists(tmp_eval_path) == False:
@@ -394,27 +450,23 @@ def eval_sequential(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model_name 
         np.save(eval_file_name, eval_res)
         print("Done force: ",force)
         env_pushed.reset()
+    #endregion
     
+    #region
     #! 单个 腿, 换力 
     push_config_thigh = PushConfig(
             id = 0,
             body_index_list = [10],
-            change_interval = 50,
-            force_list = [50,100,150],
+            change_interval = 200,
+            force_list = [10,20,30],
         )
     push_config_hip = PushConfig(
             id = 1,
             body_index_list = [11],
-            change_interval = 50,
-            force_list = [50,100,150],
+            change_interval = 200,
+            force_list = [10,20,30],
         )
-    push_config_foot = PushConfig(
-            id = 2,
-            body_index_list = [12],
-            change_interval = 50,
-            force_list = [50,100,150],
-        )
-    list_push_config = [push_config_thigh,push_config_hip,push_config_foot]
+    list_push_config = [push_config_thigh,push_config_hip]
     for config in list_push_config:
         env_pushed.set_eval_config(
                 eval_config = [config]
@@ -435,10 +487,61 @@ def eval_sequential(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model_name 
         eval_file_name = os.path.join(tmp_eval_path,eval_name)
         np.save(eval_file_name, eval_res)
         print("Done force: ",force)
+    #endregion
 
-# if __name__ == '__main__':
-#     args = get_args()
-#     path = "logs/VQ/Dec06_14-28-58_STG_4_head/model_10000.pt"
+    #region
+    #! 单个腿 A;单个腿 B; 双腿个腿 A+B
+    push_config_thigh = PushConfig(
+            id = 0,
+            body_index_list = [6],
+            change_interval = 200,
+            force_list = [30],
+        )
+    push_config_hip = PushConfig(
+            id = 1,
+            body_index_list = [10],
+            change_interval = 200,
+            force_list = [30],
+        )
+    list_push_config = [push_config_thigh,push_config_hip,[push_config_thigh,push_config_hip]]
+    for i,config in enumerate(list_push_config):
+        env_pushed.set_eval_config(
+                eval_config = config
+            )
+        eval_name = train_cfg.runner.experiment_name + "-" + train_cfg.runner.run_name + f"-Clustering_{i}-" +model_name+ "-" + name
+        list_indices = []
+        list_latents = []
+        for i in range(int(env.max_episode_length) + 10):
+            obs_dict = env_pushed.obs_dict
+            with torch.no_grad():
+                actions = policy.act_inference(obs_dict)
+                latents, indices, _ = policy.get_VQ_info(obs_dict)
+                env_pushed.step(actions.detach(), draw=False)
+                list_indices.append(indices.detach().cpu().numpy())
+                list_latents.append(latents.detach().cpu().numpy())
+
+        eval_res = env_pushed.get_result()
+        list_indices = np.stack(list_indices,axis=1)
+        list_latents = np.stack(list_latents,axis=1)
+        eval_res['indices'] = list_indices
+        eval_res['latents'] = list_latents # (num_envs, num_steps, num_latents)
+
+        # tmp_eval_path = os.path.join(eval_path,str(force)+'N')
+        tmp_eval_path = eval_path
+        if os.path.exists(tmp_eval_path) == False:
+            os.makedirs(tmp_eval_path)
+        eval_file_name = os.path.join(tmp_eval_path,eval_name)
+        np.save(eval_file_name, eval_res)
+        print("Done force: ",force)
+    #endregion
+
+if __name__ == '__main__':
+    args = get_args()
+    path = "logs/VQ_Eval/Dec15_14-49-20_VQ/model_10000.pt"
+
+    # eval_stationary(args,path = path,cmd_vel = [1.0,0.0,0.0],
+    #                 name = 'IID_V10',
+    #                 eval_path = "logs/Eval4/iid/v10")
     # eval_stationary_multiforce(
     #     args = args,
     #     path = path,
@@ -469,47 +572,48 @@ def eval_sequential(args, path , cmd_vel =[0.5,0.0,0.0],name='Eval', model_name 
     #     force_list = [5,10,15,20,25,30,35,40,45,50]
     # )
 
-    # eval_sequential(
-    #     args = args,
-    #     path = path,
-    #     cmd_vel = [1.0,0.0,0.0], #! 
-    #     name = 'SeqV10', #! 
-    #     model_name = 'VQ_4_head',
-    #     eval_path = "logs/Eval/seq",#!
-    #     force = 50)
+    eval_sequential(
+        args = args,
+        path = path,
+        cmd_vel = [1.0,0.0,0.0], #! 
+        name = 'SeqV10', #! 
+        model_name = 'VQ_16_head',
+        eval_path = "logs/Eval3/seq",#!
+        force = 30)
     
-    # print("Done")
-    # exit()
+    print("Done")
+    exit()
 
-if __name__ == '__main__':
-    args = get_eval_args() 
-    if args.task_type == 'iid':
-        eval_stationary_multiforce(
-            args,
-            path = args.model_path,
-            cmd_vel =[args.cmd_vel,0.0,0.0],
-            name=args.eval_name,
-            model_name=args.model_name,
-            eval_path = args.eval_path,
-            force_list = args.force_list
-        )
-    elif args.task_type == '2body':
-        eval_2Body_multiforce(
-            args,
-            path = args.model_path,
-            cmd_vel =[args.cmd_vel,0.0,0.0],
-            name=args.eval_name,
-            model_name=args.model_name,
-            eval_path = args.eval_path,
-            force_list = args.force_list
-        )
-    elif args.task_type == '3body':
-        eval_3Body_multiforce(
-            args,
-            path = args.model_path,
-            cmd_vel =[args.cmd_vel,0.0,0.0],
-            name=args.eval_name,
-            model_name=args.model_name,
-            eval_path = args.eval_path,
-            force_list = args.force_list
-        )
+
+# if __name__ == '__main__':
+#     args = get_eval_args() 
+#     if args.task_type == 'iid':
+#         eval_stationary_multiforce(
+#             args,
+#             path = args.model_path,
+#             cmd_vel =[args.cmd_vel,0.0,0.0],
+#             name=args.eval_name,
+#             model_name=args.model_name,
+#             eval_path = args.eval_path,
+#             force_list = args.force_list
+#         )
+#     elif args.task_type == '2body':
+#         eval_2Body_multiforce(
+#             args,
+#             path = args.model_path,
+#             cmd_vel =[args.cmd_vel,0.0,0.0],
+#             name=args.eval_name,
+#             model_name=args.model_name,
+#             eval_path = args.eval_path,
+#             force_list = args.force_list
+#         )
+#     elif args.task_type == '3body':
+#         eval_3Body_multiforce(
+#             args,
+#             path = args.model_path,
+#             cmd_vel =[args.cmd_vel,0.0,0.0],
+#             name=args.eval_name,
+#             model_name=args.model_name,
+#             eval_path = args.eval_path,
+#             force_list = args.force_list
+#         )

@@ -244,8 +244,8 @@ class RunnerCfg(BasicRunnerCfg):
         #! use forward model to perform the unsupervised learning
         num_adaptation_module_substeps = 1
         use_graph = False
-        use_forward = True 
-        stop_gradient = True
+        use_forward = False 
+        stop_gradient = False
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
@@ -258,14 +258,14 @@ class RunnerCfg(BasicRunnerCfg):
         commitment_weight = 1.0
         orthogonal_reg_weight = 0.0 # 0.01
         codebook_size = 32 #32 
-        n_heads = 4 # 1,2,4,8,16 
+        n_heads = 16 # 1,2,4,8,16 
         ema_update=True
         decay=0.98
         eps= 1e-5
         elephant_actor = False
     class runner:
         run_name = 'STG_4_head'
-        experiment_name = 'Raw_VQ'
+        experiment_name = 'VQ'
         
         num_steps_per_env = 24 # per iteration
         max_iterations = 5000 # number of policy updates

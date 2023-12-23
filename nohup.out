@@ -1,0 +1,250 @@
+Importing module 'gym_38' (/home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 2.0.1+cu117
+Device count 4
+/home/jijingtian/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/jijingtian/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/jijingtian/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+usage: eval_push_vq.py [-h] [--sim_device SIM_DEVICE] [--pipeline PIPELINE]
+                       [--graphics_device_id GRAPHICS_DEVICE_ID]
+                       [--flex | --physx] [--num_threads NUM_THREADS]
+                       [--subscenes SUBSCENES] [--slices SLICES] [--task TASK]
+                       [--resume] [--experiment_name EXPERIMENT_NAME]
+                       [--run_name RUN_NAME] [--load_run LOAD_RUN]
+                       [--checkpoint CHECKPOINT] [--headless] [--play]
+                       [--horovod] [--rl_device RL_DEVICE]
+                       [--num_envs NUM_ENVS] [--seed SEED]
+                       [--max_iterations MAX_ITERATIONS] [--n_heads N_HEADS]
+                       [--use_forward] [--stop_gradient]
+eval_push_vq.py: error: unrecognized arguments: --headloss
+Importing module 'gym_38' (/home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 2.0.1+cu117
+Device count 4
+/home/jijingtian/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/jijingtian/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/jijingtian/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+Loading extension module gymtorch...
+/home/jijingtian/miniconda3/envs/terrain/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Check Body Names:  ['base', 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot', 'FR_hip', 'FR_thigh', 'FR_calf', 'FR_foot', 'RL_hip', 'RL_thigh', 'RL_calf', 'RL_foot', 'RR_hip', 'RR_thigh', 'RR_calf', 'RR_foot']
+VQActorCritic
+VQActorCritic(
+  (adaptation_module): Sequential(
+    (0): Linear(in_features=260, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=128, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=128, out_features=128, bias=True)
+  )
+  (vq): VectorQuantize(
+    (_codebook): SimpleCodeBook()
+  )
+  (actor): Sequential(
+    (0): Linear(in_features=180, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=12, bias=True)
+  )
+  (critic): Sequential(
+    (0): Linear(in_features=59, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+Traceback (most recent call last):
+  File "eval_push_vq.py", line 531, in <module>
+    eval_sequential(
+  File "eval_push_vq.py", line 422, in eval_sequential
+    list_push_config = [push_config_thigh,push_config_hip,push_config_foot]
+UnboundLocalError: local variable 'push_config_foot' referenced before assignment
+Importing module 'gym_38' (/home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 2.0.1+cu117
+Device count 4
+/home/jijingtian/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/jijingtian/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/jijingtian/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+Loading extension module gymtorch...
+/home/jijingtian/miniconda3/envs/terrain/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Check Body Names:  ['base', 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot', 'FR_hip', 'FR_thigh', 'FR_calf', 'FR_foot', 'RL_hip', 'RL_thigh', 'RL_calf', 'RL_foot', 'RR_hip', 'RR_thigh', 'RR_calf', 'RR_foot']
+VQActorCritic
+VQActorCritic(
+  (adaptation_module): Sequential(
+    (0): Linear(in_features=260, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=128, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=128, out_features=128, bias=True)
+  )
+  (vq): VectorQuantize(
+    (_codebook): SimpleCodeBook()
+  )
+  (actor): Sequential(
+    (0): Linear(in_features=180, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=12, bias=True)
+  )
+  (critic): Sequential(
+    (0): Linear(in_features=59, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done
+Importing module 'gym_38' (/home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 2.0.1+cu117
+Device count 4
+/home/jijingtian/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/jijingtian/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/jijingtian/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+Loading extension module gymtorch...
+/home/jijingtian/miniconda3/envs/terrain/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Check Body Names:  ['base', 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot', 'FR_hip', 'FR_thigh', 'FR_calf', 'FR_foot', 'RL_hip', 'RL_thigh', 'RL_calf', 'RL_foot', 'RR_hip', 'RR_thigh', 'RR_calf', 'RR_foot']
+VQActorCritic
+VQActorCritic(
+  (adaptation_module): Sequential(
+    (0): Linear(in_features=260, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=128, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=128, out_features=128, bias=True)
+  )
+  (vq): VectorQuantize(
+    (_codebook): SimpleCodeBook()
+  )
+  (actor): Sequential(
+    (0): Linear(in_features=180, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=12, bias=True)
+  )
+  (critic): Sequential(
+    (0): Linear(in_features=59, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done
+Importing module 'gym_38' (/home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/jijingtian/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 2.0.1+cu117
+Device count 4
+/home/jijingtian/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/jijingtian/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/jijingtian/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+Loading extension module gymtorch...
+/home/jijingtian/miniconda3/envs/terrain/lib/python3.8/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Check Body Names:  ['base', 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot', 'FR_hip', 'FR_thigh', 'FR_calf', 'FR_foot', 'RL_hip', 'RL_thigh', 'RL_calf', 'RL_foot', 'RR_hip', 'RR_thigh', 'RR_calf', 'RR_foot']
+VQActorCritic
+VQActorCritic(
+  (adaptation_module): Sequential(
+    (0): Linear(in_features=260, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=128, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=128, out_features=128, bias=True)
+  )
+  (vq): VectorQuantize(
+    (_codebook): SimpleCodeBook()
+  )
+  (actor): Sequential(
+    (0): Linear(in_features=180, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=12, bias=True)
+  )
+  (critic): Sequential(
+    (0): Linear(in_features=59, out_features=512, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=512, out_features=256, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=256, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done force:  30
+Done

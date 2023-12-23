@@ -12,7 +12,8 @@ class PushConfig:
                  id,
                  body_index_list:list,
                  change_interval:int,
-                 force_list:list, ) -> None:
+                 force_list:list, 
+                 ) -> None:
         self.id = id 
         self.body_index_list =body_index_list
         self.change_interval = change_interval
@@ -20,6 +21,7 @@ class PushConfig:
         assert len(self.body_index_list) > 0 and  len(self.force_list) > 0
         self._force = self.force_list[0]
         self._body_index = self.body_index_list[0] 
+        self._body_index_list = np.random.choice(self.body_index_list,size=100)
 
         self._config_info = {
             'config:id':self.id,
@@ -28,16 +30,18 @@ class PushConfig:
             'config:force_list':self.force_list,
         }
     
-    def _change(self):
+    def _change(self,num_env = 100):
         self._force = np.random.choice(self.force_list)
         self._body_index = np.random.choice(self.body_index_list) 
+        self._body_index_list = np.random.choice(self.body_index_list,size=num_env)
     
     def get_config_info(self):
         return self._config_info
 
 class EvalWrapper():
-    def __init__(self, env:LeggedRobot, env_cfg, cmd_vel = [0.5, 0.0,0.0],
+    def __init__(self, env:LeggedRobot, env_cfg, cmd_vel = [0.5, 0.0,0.0],async_mode = False,
                  record = False, move_camera = False,experiment_name = 'Eval'):
+        self.async_mode = async_mode 
         self.env = env
         self.env.set_eval()
         self.eval_config = None
@@ -68,6 +72,8 @@ class EvalWrapper():
             self.env.set_command(self.cmd_vel)
         self.obs_dict = self.env.get_observations()
         self.eval_res = defaultdict(list)
+        for config in self.eval_config:
+            config._change(self.env.num_envs) 
 
 
     def set_eval_config(self, eval_config):
@@ -78,14 +84,18 @@ class EvalWrapper():
     
     
     def step(self, action,draw = False):
-        for config in self.eval_config:
-            self.env.set_force_apply(config._body_index, config._force, z_force_norm = 0)
+        for i, config in enumerate(self.eval_config):
+            if self.async_mode: 
+                body_index = config._body_index_list 
+                self.eval_res[f'body_index_{i}'].append(body_index)
+            else:
+                body_index = config._body_index
+            self.env.set_force_apply(body_index, config._force, z_force_norm = 0)
             if draw:
-                self.env.draw_force(config._body_index)
+                self.env.draw_force(body_index)
             if config.change_interval > 0 and (self.step_ct% config.change_interval == 0):
                 config._change()
                 
-
         self.obs_dict, rewards, dones, infos= self.env.step(action.detach())
         eval_res = self.env.get_push_data()
         for k,v in eval_res.items():

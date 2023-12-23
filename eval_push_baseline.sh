@@ -12,6 +12,9 @@ cmd_vel_values=(0.5 1.0)
 num_task=${#task_types[@]}
 num_baseline=${#baseline_names[@]}
 
+# 启动任务计数器
+task_counter=0
+
 for ((i=0; i<$num_task; i++))
 do
     task_type=${task_types[$i]}
@@ -26,12 +29,23 @@ do
         for cmd_vel in "${cmd_vel_values[@]}"
         do
             cmd_vel_no_dot="${cmd_vel//./}"
-            new_save_path="${save_path}v${cmd_vel_no_dot}/"
-            eval_name="${task_type}v${cmd_vel_no_dot}"
+            new_save_path="${save_path}/v${cmd_vel_no_dot}/"
+            eval_name="${task_type}_v${cmd_vel_no_dot}"
+
+            # 计算 CUDA 设备 ID
+            device_id=$((task_counter % 3 + 1))
+            rl_device="cuda:${device_id}"
+            sim_device="cuda:${device_id}"
+
+            # 使用日期和时间为输出文件生成唯一的前缀
+            timestamp=$(date +"%Y%m%d%H%M%S")
+            output_file="output_${eval_name}_${timestamp}.out"
+
+
             nohup python eval_push_baseline.py \
             --headless \
-            --rl_device cuda:3 \
-            --sim_device cuda:3 \
+            --rl_device "cuda:${device_id}" \
+            --sim_device "cuda:${device_id}" \
             --model_path "$model_path" \
             --eval_name "$eval_name" \
             --eval_path "$new_save_path" \
@@ -39,7 +53,16 @@ do
             --baseline_name "$baseline_name" \
             --cmd_vel "$cmd_vel" \
             $force_list \
-            > output.out
+            > "$output_file" 2>&1 &
+            # 更新任务计数器
+            task_counter=$((task_counter + 1))
+
+            # 可以选择在此处检查当前运行的后台任务数量
+            # 并在达到一定数量时等待它们完成
+            if (( task_counter % 6 == 0 )); then
+                wait
+            fi
+
         done
     done
 done

@@ -465,7 +465,7 @@ class VectorQuantize(nn.Module):
 
     def get_info(self,x):
         ein_rhs_eq = 'h b d'
-        x = rearrange(input, f"b (h d) -> {ein_rhs_eq}", h = self.n_head)
+        x = rearrange(x, f"b (h d) -> {ein_rhs_eq}", h = self.n_head)
         # quantize
         quantize, embed_ind, distances = self._codebook(x)
         embed_ind = rearrange(embed_ind, 'h b -> b h', h = self.n_head)
